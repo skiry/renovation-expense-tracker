@@ -410,7 +410,7 @@ function AddExpenseFab() {
                 id="c"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as Currency)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base sm:text-sm"
               >
                 <option value="RON">RON</option>
                 <option value="EUR">EUR</option>
@@ -425,7 +425,7 @@ function AddExpenseFab() {
             <Label htmlFor="desc">Descriere (opțional)</Label>
             <textarea
               id="desc"
-              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-base sm:text-sm"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />

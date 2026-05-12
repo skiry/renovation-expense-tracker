@@ -275,7 +275,7 @@ export default function ExpenseDetailPage() {
               <select
                 value={expense.estimatedCurrency}
                 onChange={(e) => patch({ estimatedCurrency: e.target.value as Currency })}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base sm:text-sm"
               >
                 <option value="RON">RON</option>
                 <option value="EUR">EUR</option>
@@ -493,7 +493,7 @@ function DetailRow({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={commitName}
-          className={cn('h-9 text-sm sm:flex-1 sm:order-2', detail.isPaid && 'line-through text-muted-foreground')}
+          className={cn('h-9 sm:flex-1 sm:order-2', detail.isPaid && 'line-through text-muted-foreground')}
           placeholder="Nume produs/serviciu"
         />
         <div className="flex items-center gap-2 sm:contents">
@@ -509,12 +509,12 @@ function DetailRow({
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             onBlur={commitPrice}
-            className="flex-1 sm:flex-none sm:w-24 h-9 text-sm tabular-nums sm:order-3"
+            className="flex-1 sm:flex-none sm:w-24 h-9 tabular-nums sm:order-3"
           />
           <select
             value={detail.currency}
             onChange={(e) => onUpdate({ currency: e.target.value as Currency })}
-            className="h-9 rounded-md border border-input bg-background px-2 text-xs sm:order-4"
+            className="h-9 rounded-md border border-input bg-background px-2 text-base sm:text-xs sm:order-4"
           >
             <option value="RON">RON</option>
             <option value="EUR">EUR</option>
@@ -615,7 +615,7 @@ function AddDetailButton({
                 id="dc"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as Currency)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base sm:text-sm"
               >
                 <option value="RON">RON</option>
                 <option value="EUR">EUR</option>
