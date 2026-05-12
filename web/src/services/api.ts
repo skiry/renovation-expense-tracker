@@ -253,16 +253,38 @@ class MockApi implements IApi {
 
 // ----------------------- REAL IMPLEMENTATION (stub for Phase 2) -----------------------
 
+/** Thrown when the server returns 412 Precondition Failed (someone else modified the resource). */
+export class ConflictError extends Error {
+  constructor(message = 'Resource was modified by another user') {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
 class HttpApi implements IApi {
-  private headers(accessCode?: string): HeadersInit {
+  private headers(accessCode?: string, ifMatch?: string): HeadersInit {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
     if (accessCode) h['x-access-code'] = accessCode;
+    if (ifMatch) h['If-Match'] = ifMatch;
     return h;
   }
 
-  private async req<T>(path: string, init: RequestInit = {}, accessCode?: string): Promise<T> {
-    const res = await fetch(`/api${path}`, { ...init, headers: { ...this.headers(accessCode), ...(init.headers ?? {}) } });
-    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  private async req<T>(path: string, init: RequestInit = {}, accessCode?: string, ifMatch?: string): Promise<T> {
+    const res = await fetch(`/api${path}`, {
+      ...init,
+      headers: { ...this.headers(accessCode, ifMatch), ...(init.headers ?? {}) },
+    });
+    if (res.status === 412) throw new ConflictError();
+    if (!res.ok) {
+      let msg = `API ${res.status}`;
+      try {
+        const body = await res.json();
+        if (body?.error) msg = body.error;
+      } catch {
+        // ignore
+      }
+      throw new Error(msg);
+    }
     if (res.status === 204) return undefined as T;
     return res.json();
   }
@@ -289,7 +311,8 @@ class HttpApi implements IApi {
     return this.req<Expense>('/expenses', { method: 'POST', body: JSON.stringify(data) }, accessCode);
   }
   updateExpense(accessCode: string, id: string, patch: Partial<Expense>) {
-    return this.req<Expense>(`/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }, accessCode);
+    const { _etag, ...rest } = patch as Partial<Expense> & { _etag?: string };
+    return this.req<Expense>(`/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(rest) }, accessCode, _etag);
   }
   deleteExpense(accessCode: string, id: string) {
     return this.req<void>(`/expenses/${id}`, { method: 'DELETE' }, accessCode);
@@ -301,7 +324,11 @@ class HttpApi implements IApi {
     return this.req<Expense>(`/expenses/${expenseId}/details`, { method: 'POST', body: JSON.stringify(detail) }, accessCode);
   }
   updateDetail(accessCode: string, expenseId: string, detailId: string, patch: Partial<ExpenseDetail>) {
-    return this.req<Expense>(`/expenses/${expenseId}/details/${detailId}`, { method: 'PATCH', body: JSON.stringify(patch) }, accessCode);
+    return this.req<Expense>(
+      `/expenses/${expenseId}/details/${detailId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+      accessCode
+    );
   }
   deleteDetail(accessCode: string, expenseId: string, detailId: string) {
     return this.req<Expense>(`/expenses/${expenseId}/details/${detailId}`, { method: 'DELETE' }, accessCode);
@@ -314,7 +341,16 @@ class HttpApi implements IApi {
       headers: { 'x-access-code': accessCode },
       body: fd,
     });
-    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    if (!res.ok) {
+      let msg = `Upload failed: ${res.status}`;
+      try {
+        const body = await res.json();
+        if (body?.error) msg = body.error;
+      } catch {
+        // ignore
+      }
+      throw new Error(msg);
+    }
     return res.json();
   }
   deletePhoto(accessCode: string, expenseId: string, photoId: string) {
@@ -324,7 +360,7 @@ class HttpApi implements IApi {
     return this.req<ExchangeRate>('/exchange-rate');
   }
   refreshExchangeRate() {
-    return this.req<ExchangeRate>('/exchange-rate?refresh=true', { method: 'POST' });
+    return this.req<ExchangeRate>('/exchange-rate', { method: 'POST' });
   }
 }
 

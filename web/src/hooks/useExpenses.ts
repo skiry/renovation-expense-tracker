@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/services/api';
+import { toast } from 'sonner';
+import { api, ConflictError, IS_MOCK } from '@/services/api';
 import { Expense, ExpenseDetail } from '@/types';
 import { useAuthStore } from '@/store/auth';
 
@@ -9,12 +10,17 @@ export const QK = {
   rate: ['rate'] as const,
 };
 
+// In real (non-mock) mode, refetch every 20s when window is focused.
+const POLL_INTERVAL = IS_MOCK ? false : 20_000;
+
 export function useExpenses() {
   const accessCode = useAuthStore((s) => s.accessCode);
   return useQuery({
     queryKey: QK.expenses(accessCode ?? ''),
     queryFn: () => api.listExpenses(accessCode!),
     enabled: !!accessCode,
+    refetchInterval: POLL_INTERVAL,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -24,6 +30,8 @@ export function useExpense(id: string | undefined) {
     queryKey: QK.expense(accessCode ?? '', id ?? ''),
     queryFn: () => api.getExpense(accessCode!, id!),
     enabled: !!accessCode && !!id,
+    refetchInterval: POLL_INTERVAL,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -44,6 +52,13 @@ function useInvalidate() {
   };
 }
 
+function handleConflict(err: unknown, invalidate: () => void): void {
+  if (err instanceof ConflictError) {
+    toast.warning('Cheltuiala a fost modificată de altcineva. Reîncarc datele…');
+    invalidate();
+  }
+}
+
 export function useCreateExpense() {
   const accessCode = useAuthStore((s) => s.accessCode);
   const invalidate = useInvalidate();
@@ -59,6 +74,7 @@ export function useUpdateExpense() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<Expense> }) => api.updateExpense(accessCode!, id, patch),
     onSuccess: (_data, { id }) => invalidate(id),
+    onError: (err, { id }) => handleConflict(err, () => invalidate(id)),
   });
 }
 
@@ -87,6 +103,7 @@ export function useAddDetail() {
     mutationFn: ({ expenseId, detail }: { expenseId: string; detail: Omit<ExpenseDetail, 'id'> }) =>
       api.addDetail(accessCode!, expenseId, detail),
     onSuccess: (_data, { expenseId }) => invalidate(expenseId),
+    onError: (err, { expenseId }) => handleConflict(err, () => invalidate(expenseId)),
   });
 }
 
@@ -104,6 +121,7 @@ export function useUpdateDetail() {
       patch: Partial<ExpenseDetail>;
     }) => api.updateDetail(accessCode!, expenseId, detailId, patch),
     onSuccess: (_data, { expenseId }) => invalidate(expenseId),
+    onError: (err, { expenseId }) => handleConflict(err, () => invalidate(expenseId)),
   });
 }
 
@@ -114,6 +132,7 @@ export function useDeleteDetail() {
     mutationFn: ({ expenseId, detailId }: { expenseId: string; detailId: string }) =>
       api.deleteDetail(accessCode!, expenseId, detailId),
     onSuccess: (_data, { expenseId }) => invalidate(expenseId),
+    onError: (err, { expenseId }) => handleConflict(err, () => invalidate(expenseId)),
   });
 }
 

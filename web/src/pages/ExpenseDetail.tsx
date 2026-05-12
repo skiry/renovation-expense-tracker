@@ -84,7 +84,7 @@ export default function ExpenseDetailPage() {
   const detailedEmpty = expense.details.length === 0;
 
   function patch(p: Parameters<typeof updateExpense.mutate>[0]['patch']) {
-    updateExpense.mutate({ id: expense!.id, patch: p });
+    updateExpense.mutate({ id: expense!.id, patch: { ...p, _etag: expense!._etag } });
   }
 
   function commitTitle() {

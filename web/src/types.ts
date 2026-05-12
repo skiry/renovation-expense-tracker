@@ -31,6 +31,8 @@ export interface Expense {
   photos: ExpensePhoto[];
   createdAt: string;
   updatedAt: string;
+  /** Cosmos DB ETag for optimistic concurrency. Sent back on PATCH via If-Match header. */
+  _etag?: string;
 }
 
 export interface Workspace {

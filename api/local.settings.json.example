@@ -1,0 +1,21 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "FUNCTIONS_NODE_BLOCK_ON_ENTRY_POINT_ERROR": "true",
+
+    "MASTER_ACCESS_CODE": "1234",
+
+    "COSMOS_CONNECTION": "AccountEndpoint=https://<your-account>.documents.azure.com:443/;AccountKey=<your-key>;",
+    "COSMOS_DB_NAME": "reno",
+
+    "BLOB_CONNECTION": "DefaultEndpointsProtocol=https;AccountName=<your-storage>;AccountKey=<your-key>;EndpointSuffix=core.windows.net",
+    "BLOB_CONTAINER": "expense-photos"
+  },
+  "Host": {
+    "LocalHttpPort": 7071,
+    "CORS": "http://localhost:5173",
+    "CORSCredentials": false
+  }
+}
