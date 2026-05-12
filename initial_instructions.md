@@ -31,22 +31,25 @@ Step-by-step actions you need to perform to move from the local POC to a fully-d
    git push -u origin main
    ```
 
-### C. Cosmos DB (≈10 min, free)
+### C. Cosmos DB (≈10 min, serverless — pennies/month)
 
 6. Azure Portal → **Create a resource** → **Azure Cosmos DB** → **Azure Cosmos DB for NoSQL**.
 7. Settings:
    - **Resource group:** create new `rg-reno-tracker`.
    - **Account name:** `cosmos-reno-<something-unique>` (e.g., your name).
    - **Region:** `West Europe` (or the closest to you).
-   - **Capacity mode:** `Provisioned throughput`.
-   - **Apply Free Tier Discount:** ✅ YES (1000 RU/s + 25 GB free forever — only one account per subscription can use it).
+   - **Capacity mode:** **`Serverless`** (pay-per-request, no minimum charge, ideal for low / sporadic traffic).
+   - *(No "Apply Free Tier Discount" — serverless doesn't use the free tier; it's already pay-as-you-go.)*
 8. After creation → **Data Explorer** → **New Database**:
-   - Database id: `reno`
-   - Throughput: `Manual 1000 RU/s` (free with the free tier) or `Autoscale 1000 max`.
+   - Database id: `reno`.
+   - *(Serverless doesn't require throughput configuration here.)*
 9. Inside database `reno` → **New Container** (twice):
    - Container 1: id `workspaces`, partition key `/id`.
    - Container 2: id `expenses`, partition key `/workspaceId`.
+   - *(Serverless doesn't require throughput configuration here either.)*
 10. Sidebar → **Settings → Keys** → copy the **PRIMARY CONNECTION STRING** to a notepad.
+
+> 💸 **Cost note:** for this app's traffic profile (a handful of users, dozens of expenses), expect **<$0.05/month**. You only pay for RUs actually consumed.
 
 ### D. Storage Account for photos (≈5 min)
 
@@ -115,6 +118,6 @@ Once A–F are checked, send me a message with:
 
 ## ⚠️ Important notes
 
-- **Cosmos DB free tier:** make sure to tick "Apply Free Tier Discount" at creation time. Only ONE account per subscription can have free tier — if you already use it elsewhere, you'll pay ~$24/month for minimum throughput.
-- **Estimated total cost** (with free tier + light traffic): **$0–3/month** (storage account ≈$0.10 + minimal bandwidth).
+- **Cosmos DB serverless:** pay-per-request, no minimum charge. For this app's traffic profile expect under **$0.05/month**.
+- **Estimated total cost** (light traffic): **$0–1/month** (Cosmos serverless ≈ cents + storage account ≈ $0.10 + minimal bandwidth).
 - **Do NOT commit connection strings to the repo!** Only put them in the SWA Application Settings.

@@ -281,7 +281,7 @@ Outline of what we'll do:
 
 1. **Create a resource group** (e.g., `rg-reno-tracker`).
 2. **Cosmos DB**:
-   - Account: NoSQL API, free tier enabled.
+   - Account: NoSQL API, **Serverless** capacity mode.
    - Database: `reno`.
    - Containers:
      - `workspaces`, partition key `/id`.
