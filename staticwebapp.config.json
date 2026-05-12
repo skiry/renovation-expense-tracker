@@ -1,0 +1,16 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/images/*.{png,jpg,gif,svg,webp}", "/css/*", "/js/*", "/api/*", "/*.{ico,png,svg,jpg,webp,js,css,map,json,txt,xml,webmanifest}"]
+  },
+  "globalHeaders": {
+    "Cache-Control": "no-cache",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
+  },
+  "mimeTypes": {
+    ".json": "application/json",
+    ".webmanifest": "application/manifest+json"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "Renovation Expense Tracker",
+  "short_name": "RenoTrack",
+  "description": "Evidența cheltuielilor de renovare",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
