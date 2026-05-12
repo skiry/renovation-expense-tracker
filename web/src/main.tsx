@@ -18,7 +18,6 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
-  // Re-apply on system preference change when theme = 'system'
   useEffect(() => {
     if (theme !== 'system') return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -31,6 +30,15 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
 
 // Apply persisted theme as early as possible to avoid flash
 applyTheme(useThemeStore.getState().theme);
+
+// Register service worker for offline support (only in production builds).
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch((err) => console.warn('SW registration failed:', err));
+  });
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

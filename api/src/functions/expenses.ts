@@ -1,7 +1,7 @@
 import { app, HttpRequest } from '@azure/functions';
 import { authenticate } from '../middleware/auth';
 import { expensesContainer } from '../services/cosmos';
-import { ok, noContent, badRequest, notFound, conflict, serverError, unauthorized } from '../shared/responses';
+import { ok, noContent, badRequest, notFound, conflict, serverError } from '../shared/responses';
 import { slugifyTitle, uniqueSlug } from '../shared/slug';
 import { Expense } from '../shared/types';
 import { withPhotoUrls, sanitizeForStorage } from '../shared/transformers';
@@ -16,8 +16,9 @@ async function listAllExpenses(workspaceId: string): Promise<Expense[]> {
   return resources;
 }
 
-app.http('listExpenses', {
-  methods: ['GET', 'OPTIONS'],
+// /expenses — list (GET) and create (POST)
+app.http('expensesCollection', {
+  methods: ['GET', 'POST', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'expenses',
   handler: async (request: HttpRequest) => {
@@ -25,52 +26,15 @@ app.http('listExpenses', {
     try {
       const auth = await authenticate(request);
       if (!('accessCode' in auth)) return auth;
-      const items = await listAllExpenses(auth.accessCode);
-      items.sort((a, b) => a.order - b.order);
-      return ok(items.map(withPhotoUrls));
-    } catch (err) {
-      return serverError(err);
-    }
-  },
-});
 
-app.http('getExpense', {
-  methods: ['GET', 'OPTIONS'],
-  authLevel: 'anonymous',
-  route: 'expenses/{id}',
-  handler: async (request: HttpRequest) => {
-    if (request.method === 'OPTIONS') return ok({});
-    try {
-      const auth = await authenticate(request);
-      if (!('accessCode' in auth)) return auth;
-      const id = request.params.id;
-      if (!id) return badRequest('Missing id');
-      try {
-        const { resource, etag } = await expensesContainer().item(id, auth.accessCode).read<Expense>();
-        if (!resource) return notFound();
-        const out = withPhotoUrls({ ...resource, _etag: etag });
-        return ok(out, etag ? { ETag: etag } : undefined);
-      } catch (err: any) {
-        if (err?.code === 404) return notFound();
-        throw err;
+      if (request.method === 'GET') {
+        const items = await listAllExpenses(auth.accessCode);
+        items.sort((a, b) => a.order - b.order);
+        return ok(items.map(withPhotoUrls));
       }
-    } catch (err) {
-      return serverError(err);
-    }
-  },
-});
 
-app.http('createExpense', {
-  methods: ['POST', 'OPTIONS'],
-  authLevel: 'anonymous',
-  route: 'expenses',
-  handler: async (request: HttpRequest) => {
-    if (request.method === 'OPTIONS') return ok({});
-    try {
-      const auth = await authenticate(request);
-      if (!('accessCode' in auth)) return auth;
+      // POST
       const data = ((await request.json()) ?? {}) as Partial<Expense>;
-
       const title = (data.title ?? 'Cheltuială nouă').trim() || 'Cheltuială nouă';
       const isPriority = data.isPriority ?? false;
 
@@ -106,8 +70,43 @@ app.http('createExpense', {
   },
 });
 
-app.http('updateExpense', {
-  methods: ['PATCH', 'OPTIONS'],
+// /expenses/reorder — POST (must come before {id} catch-all)
+app.http('reorderExpenses', {
+  methods: ['POST', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'expenses/reorder',
+  handler: async (request: HttpRequest) => {
+    if (request.method === 'OPTIONS') return ok({});
+    try {
+      const auth = await authenticate(request);
+      if (!('accessCode' in auth)) return auth;
+      const ordered = ((await request.json()) ?? []) as { id: string; order: number }[];
+      if (!Array.isArray(ordered)) return badRequest('Expected array of { id, order }');
+
+      for (const { id, order } of ordered) {
+        if (typeof id !== 'string' || typeof order !== 'number') continue;
+        try {
+          const r = await expensesContainer().item(id, auth.accessCode).read<Expense>();
+          if (!r.resource) continue;
+          await expensesContainer().item(id, auth.accessCode).replace(
+            { ...r.resource, order, updatedAt: new Date().toISOString() },
+            { accessCondition: r.etag ? { type: 'IfMatch', condition: r.etag } : undefined }
+          );
+        } catch (err: any) {
+          if (err?.code === 412 || err?.code === 404) continue;
+          throw err;
+        }
+      }
+      return noContent();
+    } catch (err) {
+      return serverError(err);
+    }
+  },
+});
+
+// /expenses/{id} — get (GET), update (PATCH), delete (DELETE)
+app.http('expensesItem', {
+  methods: ['GET', 'PATCH', 'DELETE', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'expenses/{id}',
   handler: async (request: HttpRequest) => {
@@ -117,6 +116,39 @@ app.http('updateExpense', {
       if (!('accessCode' in auth)) return auth;
       const id = request.params.id;
       if (!id) return badRequest('Missing id');
+
+      if (request.method === 'GET') {
+        try {
+          const { resource, etag } = await expensesContainer().item(id, auth.accessCode).read<Expense>();
+          if (!resource) return notFound();
+          const out = withPhotoUrls({ ...resource, _etag: etag });
+          return ok(out, etag ? { ETag: etag } : undefined);
+        } catch (err: any) {
+          if (err?.code === 404) return notFound();
+          throw err;
+        }
+      }
+
+      if (request.method === 'DELETE') {
+        try {
+          const { resource } = await expensesContainer().item(id, auth.accessCode).read<Expense>();
+          if (resource?.photos?.length) {
+            const { deletePhoto: delBlob } = await import('../services/blob');
+            await Promise.allSettled(resource.photos.map((p) => delBlob(p.blobName)));
+          }
+        } catch (err: any) {
+          if (err?.code !== 404) throw err;
+        }
+
+        try {
+          await expensesContainer().item(id, auth.accessCode).delete();
+        } catch (err: any) {
+          if (err?.code !== 404) throw err;
+        }
+        return noContent();
+      }
+
+      // PATCH
       const patch = sanitizeForStorage(((await request.json()) ?? {}) as Partial<Expense>);
       const ifMatch = request.headers.get('if-match') || undefined;
 
@@ -137,7 +169,6 @@ app.http('updateExpense', {
       const wasPriority = current.isPriority;
       const merged: Expense = { ...current, ...patch, id, workspaceId: auth.accessCode, updatedAt: new Date().toISOString() };
 
-      // If priority changed, push to the end of the new section
       if (patch.isPriority !== undefined && patch.isPriority !== wasPriority) {
         const all = await listAllExpenses(auth.accessCode);
         const maxOrder = all
@@ -161,81 +192,3 @@ app.http('updateExpense', {
   },
 });
 
-app.http('deleteExpense', {
-  methods: ['DELETE', 'OPTIONS'],
-  authLevel: 'anonymous',
-  route: 'expenses/{id}',
-  handler: async (request: HttpRequest) => {
-    if (request.method === 'OPTIONS') return ok({});
-    try {
-      const auth = await authenticate(request);
-      if (!('accessCode' in auth)) return auth;
-      const id = request.params.id;
-      if (!id) return badRequest('Missing id');
-
-      // Fetch to get blob names so we can also clean up photos
-      try {
-        const { resource } = await expensesContainer().item(id, auth.accessCode).read<Expense>();
-        if (resource?.photos?.length) {
-          const { deletePhoto: delBlob } = await import('../services/blob');
-          await Promise.allSettled(resource.photos.map((p) => delBlob(p.blobName)));
-        }
-      } catch (err: any) {
-        if (err?.code !== 404) throw err;
-      }
-
-      try {
-        await expensesContainer().item(id, auth.accessCode).delete();
-      } catch (err: any) {
-        if (err?.code !== 404) throw err;
-      }
-      return noContent();
-    } catch (err) {
-      return serverError(err);
-    }
-  },
-});
-
-app.http('reorderExpenses', {
-  methods: ['POST', 'OPTIONS'],
-  authLevel: 'anonymous',
-  route: 'expenses/reorder',
-  handler: async (request: HttpRequest) => {
-    if (request.method === 'OPTIONS') return ok({});
-    try {
-      const auth = await authenticate(request);
-      if (!('accessCode' in auth)) return auth;
-      const ordered = ((await request.json()) ?? []) as { id: string; order: number }[];
-      if (!Array.isArray(ordered)) return badRequest('Expected array of { id, order }');
-
-      for (const { id, order } of ordered) {
-        if (typeof id !== 'string' || typeof order !== 'number') continue;
-        try {
-          const r = await expensesContainer().item(id, auth.accessCode).read<Expense>();
-          if (!r.resource) continue;
-          await expensesContainer().item(id, auth.accessCode).replace(
-            { ...r.resource, order, updatedAt: new Date().toISOString() },
-            { accessCondition: r.etag ? { type: 'IfMatch', condition: r.etag } : undefined }
-          );
-        } catch (err: any) {
-          if (err?.code === 412) continue; // skip conflicts in batch reorder
-          if (err?.code === 404) continue;
-          throw err;
-        }
-      }
-      return noContent();
-    } catch (err) {
-      return serverError(err);
-    }
-  },
-});
-
-// Universal preflight handler so the SWA CORS layer sees a 200 for unknown OPTIONS combos
-app.http('expensesPreflight', {
-  methods: ['OPTIONS'],
-  authLevel: 'anonymous',
-  route: 'expenses/{*path}',
-  handler: async () => ok({}),
-});
-
-export { unauthorized };

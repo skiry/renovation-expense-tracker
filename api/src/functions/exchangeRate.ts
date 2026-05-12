@@ -2,14 +2,15 @@ import { app, HttpRequest } from '@azure/functions';
 import { getEurToRon } from '../services/bnr';
 import { ok, serverError } from '../shared/responses';
 
-app.http('exchangeRateGet', {
-  methods: ['GET', 'OPTIONS'],
+app.http('exchangeRate', {
+  methods: ['GET', 'POST', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'exchange-rate',
   handler: async (request: HttpRequest) => {
     if (request.method === 'OPTIONS') return ok({});
     try {
-      const rate = await getEurToRon(false);
+      const forceRefresh = request.method === 'POST';
+      const rate = await getEurToRon(forceRefresh);
       return ok(rate);
     } catch (err) {
       return serverError(err);
@@ -17,17 +18,3 @@ app.http('exchangeRateGet', {
   },
 });
 
-app.http('exchangeRateRefresh', {
-  methods: ['POST', 'OPTIONS'],
-  authLevel: 'anonymous',
-  route: 'exchange-rate',
-  handler: async (request: HttpRequest) => {
-    if (request.method === 'OPTIONS') return ok({});
-    try {
-      const rate = await getEurToRon(true);
-      return ok(rate);
-    } catch (err) {
-      return serverError(err);
-    }
-  },
-});

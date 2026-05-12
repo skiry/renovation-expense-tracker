@@ -30,7 +30,8 @@ async function writeBackWithEtag(workspaceId: string, expense: Expense, etag?: s
   }
 }
 
-app.http('addDetail', {
+// /expenses/{id}/details — POST add
+app.http('detailsCollection', {
   methods: ['POST', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'expenses/{id}/details',
@@ -59,8 +60,9 @@ app.http('addDetail', {
   },
 });
 
-app.http('updateDetail', {
-  methods: ['PATCH', 'OPTIONS'],
+// /expenses/{id}/details/{detailId} — PATCH and DELETE
+app.http('detailsItem', {
+  methods: ['PATCH', 'DELETE', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'expenses/{id}/details/{detailId}',
   handler: async (request: HttpRequest) => {
@@ -71,17 +73,24 @@ app.http('updateDetail', {
       const id = request.params.id;
       const detailId = request.params.detailId;
       if (!id || !detailId) return badRequest('Missing id');
+
+      if (request.method === 'DELETE') {
+        const { resource, etag, error } = await readExpense(id, auth.accessCode);
+        if (error) return error;
+        resource!.details = resource!.details.filter((d) => d.id !== detailId);
+        return writeBackWithEtag(auth.accessCode, resource!, etag);
+      }
+
+      // PATCH
       const patch = ((await request.json()) ?? {}) as Partial<ExpenseDetail>;
       const { resource, etag, error } = await readExpense(id, auth.accessCode);
       if (error) return error;
       const detail = resource!.details.find((d) => d.id === detailId);
       if (!detail) return notFound('Sub-expense not found');
-      Object.assign(detail, patch);
-      // Sanitize types
-      if (typeof patch.price === 'number') detail.price = patch.price;
-      if (patch.currency && (patch.currency === 'RON' || patch.currency === 'EUR')) detail.currency = patch.currency;
-      if (typeof patch.isPaid === 'boolean') detail.isPaid = patch.isPaid;
       if (typeof patch.name === 'string') detail.name = patch.name.trim() || detail.name;
+      if (typeof patch.price === 'number') detail.price = patch.price;
+      if (patch.currency === 'RON' || patch.currency === 'EUR') detail.currency = patch.currency;
+      if (typeof patch.isPaid === 'boolean') detail.isPaid = patch.isPaid;
       return writeBackWithEtag(auth.accessCode, resource!, etag);
     } catch (err) {
       return serverError(err);
@@ -89,24 +98,3 @@ app.http('updateDetail', {
   },
 });
 
-app.http('deleteDetail', {
-  methods: ['DELETE', 'OPTIONS'],
-  authLevel: 'anonymous',
-  route: 'expenses/{id}/details/{detailId}',
-  handler: async (request: HttpRequest) => {
-    if (request.method === 'OPTIONS') return ok({});
-    try {
-      const auth = await authenticate(request);
-      if (!('accessCode' in auth)) return auth;
-      const id = request.params.id;
-      const detailId = request.params.detailId;
-      if (!id || !detailId) return badRequest('Missing id');
-      const { resource, etag, error } = await readExpense(id, auth.accessCode);
-      if (error) return error;
-      resource!.details = resource!.details.filter((d) => d.id !== detailId);
-      return writeBackWithEtag(auth.accessCode, resource!, etag);
-    } catch (err) {
-      return serverError(err);
-    }
-  },
-});

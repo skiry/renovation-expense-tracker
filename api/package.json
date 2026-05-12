@@ -2,7 +2,7 @@
   "name": "renovation-expense-tracker-api",
   "version": "0.1.0",
   "private": true,
-  "main": "dist/src/index.js",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "func start",

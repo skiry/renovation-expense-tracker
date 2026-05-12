@@ -4,6 +4,7 @@ import LoginPage from './pages/Login';
 import DashboardPage from './pages/Dashboard';
 import ExpenseDetailPage from './pages/ExpenseDetail';
 import SettingsPage from './pages/Settings';
+import NotFoundPage from './pages/NotFound';
 import AppLayout from './components/AppLayout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -40,7 +41,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
