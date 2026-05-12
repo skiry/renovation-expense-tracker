@@ -133,23 +133,25 @@ Vite proxies `/api/*` to `http://127.0.0.1:7071`, so the frontend just calls `/a
 
 ## 🔀 Switching between mock and Azure backend
 
-The frontend picks its API implementation at build time from the environment variable `VITE_USE_MOCK`.
+The frontend picks its API implementation at **build time** from `import.meta.env.VITE_USE_MOCK`:
 
-| `VITE_USE_MOCK` | Mode | API source |
+| Mode | Default | How to force |
 |---|---|---|
-| `true` (default) | Mock | `localStorage` via `MockApi` |
-| `false` | Real | `/api/*` via `HttpApi` (Azure Functions) |
+| Mock (localStorage) | `npm run dev` (development) | `VITE_USE_MOCK=true npm run build` |
+| Real API (`/api/*`) | `npm run build` (production) | `VITE_USE_MOCK=false npm run dev` |
 
-In production this is configured per environment in **Azure Static Web App → Configuration → Application settings** (set to `false`). In local dev you can override per terminal:
+> ⚠️ **Vite reads `VITE_*` only at build time.** Setting `VITE_USE_MOCK` in Azure SWA Application Settings has no effect — those are runtime env vars exposed only to the Functions API. The frontend baked its choice in during GitHub Actions build.
+
+For local dev with the real API in another terminal:
 
 ```powershell
 $env:VITE_USE_MOCK="false"; npm run dev   # PowerShell
 VITE_USE_MOCK=false npm run dev           # bash/zsh
 ```
 
-When switching, you may want to delete the mock data from localStorage:
+When switching, delete the mock data from localStorage:
 
-1. DevTools → Application → Local Storage → `http://localhost:5173`
+1. DevTools → Application → Local Storage → site URL.
 2. Delete keys `reno-mock-data-v1`, `reno-auth`.
 
 ---

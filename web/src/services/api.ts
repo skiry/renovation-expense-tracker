@@ -364,7 +364,9 @@ class HttpApi implements IApi {
   }
 }
 
-const useMock = (import.meta.env.VITE_USE_MOCK ?? 'true') !== 'false';
+// Default: real API in production builds, mock in dev. Override with VITE_USE_MOCK=true|false.
+const explicit = import.meta.env.VITE_USE_MOCK;
+const useMock = explicit !== undefined ? explicit !== 'false' : import.meta.env.DEV;
 
 export const api: IApi = useMock ? new MockApi() : new HttpApi();
 export const IS_MOCK = useMock;

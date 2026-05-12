@@ -498,15 +498,14 @@ When you ship a new release, bump `SW_VERSION` in `sw.js` to invalidate stale ca
 
 ## 12. Switching between mock and Azure backend
 
-The frontend reads `import.meta.env.VITE_USE_MOCK` at build time:
+The frontend reads `import.meta.env.VITE_USE_MOCK` at **build time**:
 
-- `'true'` (or missing) → `MockApi` (localStorage).
-- `'false'` → `HttpApi` (calls `/api/*`).
+| Scenario | Default | Override |
+|---|---|---|
+| Local dev with mock (UI iteration) | mock (because `npm run dev` runs in dev mode) | none needed |
+| Local dev with real API | mock | `$env:VITE_USE_MOCK="false"; npm run dev` (PowerShell) or `VITE_USE_MOCK=false npm run dev` (bash) |
+| Production (Azure) build | real API (because `npm run build` runs in prod mode) | none needed |
 
-| Scenario | How to set it |
-|---|---|
-| Local dev with mock (UI iteration) | Default — no env needed. |
-| Local dev with real API | `$env:VITE_USE_MOCK="false"; npm run dev` (PowerShell) or `VITE_USE_MOCK=false npm run dev` (bash). |
-| Production (Azure) | Add `VITE_USE_MOCK=false` to SWA Application settings. |
+> ⚠️ **`VITE_USE_MOCK` cannot be set via Azure SWA Application Settings.** Those settings are runtime-only and apply to the Functions API. Vite freezes the value during GitHub Actions build. If you ever needed a non-default value in production, you'd inject it as a GitHub Actions env var in the workflow YAML, or commit a `.env.production` file.
 
 Polling (`refetchInterval: 20s` on focused tab) automatically activates whenever `IS_MOCK === false`.
