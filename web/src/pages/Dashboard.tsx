@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, EyeOff, Eye, ChevronRight, Check, Camera, X } from 'lucide-react';
+import { GripVertical, Plus, EyeOff, Eye, ChevronRight, Check, Camera, X, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import imageCompression from 'browser-image-compression';
 
@@ -37,10 +37,12 @@ import {
   useCreateExpense,
   useAddPhoto,
 } from '@/hooks/useExpenses';
-import { computeTotals, displayPriceRon } from '@/utils/calculations';
+import { displayPriceRon, spentForExpense } from '@/utils/calculations';
 import { formatRon, cn } from '@/lib/utils';
 import { useUiStore } from '@/store/ui';
 import { Expense, Currency } from '@/types';
+
+type Tab = 'priority' | 'non-priority';
 
 export default function DashboardPage() {
   const { data: expenses = [], isLoading } = useExpenses();
@@ -49,77 +51,166 @@ export default function DashboardPage() {
   const hidePaid = useUiStore((s) => s.hidePaid);
   const setHidePaid = useUiStore((s) => s.setHidePaid);
 
-  const visibleExpenses = useMemo(
-    () => (hidePaid ? expenses.filter((e) => !e.isPaid) : expenses),
-    [expenses, hidePaid]
+  const [tab, setTab] = useState<Tab>('priority');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  // All items for the selected tab (no UI filters applied yet — used for totals)
+  const tabExpenses = useMemo(
+    () => expenses.filter((e) => e.isPriority === (tab === 'priority')),
+    [expenses, tab]
   );
 
-  // Totalurile sunt calculate pe TOATE elementele (nu se ascund din math, doar din UI)
-  const totals = useMemo(() => computeTotals(expenses, eurToRon), [expenses, eurToRon]);
+  // Totals are computed on ALL items in the current tab (paid or not, matched or not)
+  const tabTotals = useMemo(() => {
+    let total = 0;
+    let spent = 0;
+    let paidCount = 0;
+    for (const e of tabExpenses) {
+      total += displayPriceRon(e, eurToRon);
+      spent += spentForExpense(e, eurToRon);
+      if (e.isPaid) paidCount++;
+    }
+    return { total, spent, count: tabExpenses.length, paidCount };
+  }, [tabExpenses, eurToRon]);
 
-  const priorityList = useMemo(
-    () => visibleExpenses.filter((e) => e.isPriority).sort((a, b) => a.order - b.order),
-    [visibleExpenses]
-  );
-  const nonPriorityList = useMemo(
-    () => visibleExpenses.filter((e) => !e.isPriority).sort((a, b) => a.order - b.order),
-    [visibleExpenses]
-  );
+  // Visible list = tab filter + hidePaid + search
+  const visibleList = useMemo(() => {
+    let list = tabExpenses;
+    if (hidePaid) list = list.filter((e) => !e.isPaid);
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (e) =>
+          e.title.toLowerCase().includes(q) ||
+          e.details.some((d) => d.name.toLowerCase().includes(q))
+      );
+    }
+    return list.slice().sort((a, b) => a.order - b.order);
+  }, [tabExpenses, hidePaid, search]);
 
   return (
-    <div className="space-y-6">
-      <SummaryCard totals={totals} />
+    <div className="space-y-4">
+      <SummaryCard tab={tab} totals={tabTotals} />
 
-      <div className="flex items-center justify-between gap-3 px-1">
-        <Label htmlFor="hide-paid" className="text-sm flex items-center gap-2 cursor-pointer">
-          {hidePaid ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          Ascunde elementele achitate
-        </Label>
-        <Switch id="hide-paid" checked={hidePaid} onCheckedChange={setHidePaid} />
+      {/* Sticky tab bar + search */}
+      <div className="sticky top-14 z-20 bg-background -mx-4 px-4 pt-2 pb-3 border-b">
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border bg-muted p-1 text-sm font-medium flex-1">
+            <button
+              type="button"
+              onClick={() => setTab('priority')}
+              className={cn(
+                'flex-1 px-3 py-1.5 rounded-md transition-colors',
+                tab === 'priority' ? 'bg-background shadow font-semibold text-primary' : 'text-muted-foreground'
+              )}
+            >
+              Prioritare
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('non-priority')}
+              className={cn(
+                'flex-1 px-3 py-1.5 rounded-md transition-colors',
+                tab === 'non-priority' ? 'bg-background shadow font-semibold' : 'text-muted-foreground'
+              )}
+            >
+              Neprioritare
+            </button>
+          </div>
+          <Button
+            variant={searchOpen || search ? 'default' : 'outline'}
+            size="icon"
+            onClick={() => {
+              if (searchOpen) {
+                setSearchOpen(false);
+                setSearch('');
+              } else {
+                setSearchOpen(true);
+              }
+            }}
+            aria-label="Caută"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
+        </div>
+        {searchOpen && (
+          <div className="mt-2 flex items-center gap-2">
+            <Input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Caută în cheltuieli și sub-cheltuieli…"
+              className="flex-1"
+            />
+            {search && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSearch('')}
+                aria-label="Șterge căutare"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
-      <Section
-        title="Prioritare"
-        count={totals.priorityCount}
-        total={totals.priorityTotal}
-        items={priorityList}
-        eurToRon={eurToRon}
-        emptyText="Nicio cheltuială prioritară."
-        isPriority={true}
-      />
+      {tabTotals.paidCount > 0 && (
+        <div className="flex items-center justify-between gap-3 px-1">
+          <Label htmlFor="hide-paid" className="text-sm flex items-center gap-2 cursor-pointer">
+            {hidePaid ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            Ascunde elementele achitate
+          </Label>
+          <Switch id="hide-paid" checked={hidePaid} onCheckedChange={setHidePaid} />
+        </div>
+      )}
 
-      <Section
-        title="Neprioritare"
-        count={totals.nonPriorityCount}
-        total={totals.nonPriorityTotal}
-        items={nonPriorityList}
+      <ExpensesList
+        items={visibleList}
         eurToRon={eurToRon}
-        emptyText="Nicio cheltuială neprioritară."
-        isPriority={false}
+        emptyText={
+          search.trim()
+            ? `Nicio cheltuială ${tab === 'priority' ? 'prioritară' : 'neprioritară'} pentru „${search.trim()}".`
+            : tab === 'priority'
+            ? 'Nicio cheltuială prioritară.'
+            : 'Nicio cheltuială neprioritară.'
+        }
       />
 
       {isLoading && <p className="text-center text-muted-foreground text-sm">Se încarcă…</p>}
 
-      <AddExpenseFab />
+      <AddExpenseFab defaultPriority={tab === 'priority'} />
     </div>
   );
 }
 
 function SummaryCard({
+  tab,
   totals,
 }: {
-  totals: ReturnType<typeof computeTotals>;
+  tab: Tab;
+  totals: { total: number; spent: number; count: number; paidCount: number };
 }) {
+  const label = tab === 'priority' ? 'Prioritare' : 'Neprioritare';
   return (
     <Card>
-      <CardContent className="p-4 sm:p-6 space-y-4">
+      <CardContent className="p-4 sm:p-6">
         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-          <Stat label="Prioritare" sub={`${totals.priorityCount} ${totals.priorityCount === 1 ? 'element' : 'elemente'}`} value={totals.priorityTotal} accent="primary" />
-          <Stat label="Neprioritare" sub={`${totals.nonPriorityCount} ${totals.nonPriorityCount === 1 ? 'element' : 'elemente'}`} value={totals.nonPriorityTotal} />
-        </div>
-        <div className="border-t pt-4 grid grid-cols-2 gap-x-4 gap-y-3">
-          <Stat label="Total general" value={totals.grandTotal} bold />
-          <Stat label="Cheltuit" sub={`${totals.paidCount} ${totals.paidCount === 1 ? 'achitat' : 'achitate'}`} value={totals.spentTotal} accent="success" />
+          <Stat
+            label={`Total ${label.toLowerCase()}`}
+            sub={`${totals.count} ${totals.count === 1 ? 'element' : 'elemente'}`}
+            value={totals.total}
+            accent={tab === 'priority' ? 'primary' : undefined}
+            bold
+          />
+          <Stat
+            label="Cheltuit"
+            sub={`${totals.paidCount} ${totals.paidCount === 1 ? 'achitat' : 'achitate'}`}
+            value={totals.spent}
+            accent="success"
+          />
         </div>
       </CardContent>
     </Card>
@@ -157,22 +248,14 @@ function Stat({
   );
 }
 
-function Section({
-  title,
-  count,
-  total,
+function ExpensesList({
   items,
   eurToRon,
   emptyText,
-  isPriority,
 }: {
-  title: string;
-  count: number;
-  total: number;
   items: Expense[];
   eurToRon: number;
   emptyText: string;
-  isPriority: boolean;
 }) {
   const reorder = useReorderExpenses();
   const [localOrder, setLocalOrder] = useState<Expense[] | null>(null);
@@ -196,31 +279,24 @@ function Section({
     );
   }
 
+  if (list.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-sm text-muted-foreground">{emptyText}</CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <section className="space-y-2">
-      <div className="flex items-end justify-between px-1">
-        <h2 className="text-base font-semibold flex items-center gap-2">
-          {title}
-          <Badge variant={isPriority ? 'default' : 'secondary'}>{count}</Badge>
-        </h2>
-        <div className="text-sm font-medium tabular-nums">{formatRon(total)}</div>
-      </div>
-      {list.length === 0 ? (
-        <Card>
-          <CardContent className="p-6 text-center text-sm text-muted-foreground">{emptyText}</CardContent>
-        </Card>
-      ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={list.map((e) => e.id)} strategy={verticalListSortingStrategy}>
-            <div className="space-y-2">
-              {list.map((e) => (
-                <SortableExpenseRow key={e.id} expense={e} eurToRon={eurToRon} />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      )}
-    </section>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={list.map((e) => e.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-2">
+          {list.map((e) => (
+            <SortableExpenseRow key={e.id} expense={e} eurToRon={eurToRon} />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
   );
 }
 
@@ -295,12 +371,12 @@ function SortableExpenseRow({ expense, eurToRon }: { expense: Expense; eurToRon:
   );
 }
 
-function AddExpenseFab() {
+function AddExpenseFab({ defaultPriority = true }: { defaultPriority?: boolean }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
   const [currency, setCurrency] = useState<Currency>('RON');
-  const [isPriority, setIsPriority] = useState(false);
+  const [isPriority, setIsPriority] = useState(defaultPriority);
   const [description, setDescription] = useState('');
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -313,7 +389,7 @@ function AddExpenseFab() {
     setTitle('');
     setPrice('');
     setCurrency('RON');
-    setIsPriority(false);
+    setIsPriority(defaultPriority);
     setDescription('');
     setPendingPhotos([]);
   }
@@ -378,7 +454,12 @@ function AddExpenseFab() {
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
-        if (!v) reset();
+        if (v) {
+          // Opening — align the priority toggle with the current tab
+          setIsPriority(defaultPriority);
+        } else {
+          reset();
+        }
       }}
     >
       <DialogTrigger asChild>

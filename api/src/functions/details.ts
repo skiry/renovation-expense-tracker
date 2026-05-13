@@ -1,6 +1,7 @@
 import { app, HttpRequest } from '@azure/functions';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireUser } from '../middleware/auth';
 import { expensesContainer } from '../services/cosmos';
+import { auditDetailCreate, auditDetailDelete, auditDetailUpdate, diffDetail } from '../services/audit';
 import { ok, badRequest, notFound, conflict, serverError } from '../shared/responses';
 import { uuid } from '../shared/slug';
 import { Expense, ExpenseDetail } from '../shared/types';
@@ -23,9 +24,9 @@ async function writeBackWithEtag(workspaceId: string, expense: Expense, etag?: s
     const { resource, etag: newEtag } = await expensesContainer().item(expense.id, workspaceId).replace(expense, {
       accessCondition: etag ? { type: 'IfMatch', condition: etag } : undefined,
     });
-    return ok(withPhotoUrls({ ...(resource as Expense), _etag: newEtag }));
+    return { response: ok(withPhotoUrls({ ...(resource as Expense), _etag: newEtag })), resource: resource as Expense };
   } catch (err: any) {
-    if (err?.code === 412) return conflict();
+    if (err?.code === 412) return { response: conflict() };
     throw err;
   }
 }
@@ -40,6 +41,9 @@ app.http('detailsCollection', {
     try {
       const auth = await authenticate(request);
       if (!('accessCode' in auth)) return auth;
+      const userErr = requireUser(auth);
+      if (userErr) return userErr;
+
       const id = request.params.id;
       if (!id) return badRequest('Missing id');
       const body = ((await request.json()) ?? {}) as Partial<ExpenseDetail>;
@@ -53,7 +57,20 @@ app.http('detailsCollection', {
       const { resource, etag, error } = await readExpense(id, auth.accessCode);
       if (error) return error;
       resource!.details.push(detail);
-      return writeBackWithEtag(auth.accessCode, resource!, etag);
+      const { response, resource: updated } = await writeBackWithEtag(auth.accessCode, resource!, etag);
+      if (updated) {
+        await auditDetailCreate({
+          workspaceId: auth.accessCode,
+          userId: auth.user!.id,
+          userName: auth.user!.name,
+          expenseId: id,
+          expenseTitle: updated.title,
+          detailName: detail.name,
+          price: detail.price,
+          currency: detail.currency,
+        });
+      }
+      return response;
     } catch (err) {
       return serverError(err);
     }
@@ -70,31 +87,64 @@ app.http('detailsItem', {
     try {
       const auth = await authenticate(request);
       if (!('accessCode' in auth)) return auth;
+      const userErr = requireUser(auth);
+      if (userErr) return userErr;
+
       const id = request.params.id;
       const detailId = request.params.detailId;
       if (!id || !detailId) return badRequest('Missing id');
 
+      const { resource, etag, error } = await readExpense(id, auth.accessCode);
+      if (error) return error;
+
       if (request.method === 'DELETE') {
-        const { resource, etag, error } = await readExpense(id, auth.accessCode);
-        if (error) return error;
+        const targetDetail = resource!.details.find((d) => d.id === detailId);
         resource!.details = resource!.details.filter((d) => d.id !== detailId);
-        return writeBackWithEtag(auth.accessCode, resource!, etag);
+        const { response, resource: updated } = await writeBackWithEtag(auth.accessCode, resource!, etag);
+        if (updated && targetDetail) {
+          await auditDetailDelete({
+            workspaceId: auth.accessCode,
+            userId: auth.user!.id,
+            userName: auth.user!.name,
+            expenseId: id,
+            expenseTitle: updated.title,
+            detailName: targetDetail.name,
+            price: targetDetail.price,
+            currency: targetDetail.currency,
+          });
+        }
+        return response;
       }
 
       // PATCH
       const patch = ((await request.json()) ?? {}) as Partial<ExpenseDetail>;
-      const { resource, etag, error } = await readExpense(id, auth.accessCode);
-      if (error) return error;
       const detail = resource!.details.find((d) => d.id === detailId);
       if (!detail) return notFound('Sub-expense not found');
+      const before: ExpenseDetail = { ...detail };
+
       if (typeof patch.name === 'string') detail.name = patch.name.trim() || detail.name;
       if (typeof patch.price === 'number') detail.price = patch.price;
       if (patch.currency === 'RON' || patch.currency === 'EUR') detail.currency = patch.currency;
       if (typeof patch.isPaid === 'boolean') detail.isPaid = patch.isPaid;
-      return writeBackWithEtag(auth.accessCode, resource!, etag);
+
+      const { response, resource: updated } = await writeBackWithEtag(auth.accessCode, resource!, etag);
+      if (updated) {
+        await auditDetailUpdate({
+          workspaceId: auth.accessCode,
+          userId: auth.user!.id,
+          userName: auth.user!.name,
+          expenseId: id,
+          expenseTitle: updated.title,
+          detailName: detail.name,
+          detailChanges: diffDetail(before, detail),
+          priceMode: updated.priceMode,
+        });
+      }
+      return response;
     } catch (err) {
       return serverError(err);
     }
   },
 });
+
 

@@ -4,6 +4,8 @@ let _client: CosmosClient | null = null;
 let _db: Database | null = null;
 let _workspaces: Container | null = null;
 let _expenses: Container | null = null;
+let _history: Container | null = null;
+let _historyEnsured = false;
 
 function getClient(): CosmosClient {
   if (_client) return _client;
@@ -31,3 +33,22 @@ export function expensesContainer(): Container {
   _expenses = getDatabase().container('expenses');
   return _expenses;
 }
+
+/**
+ * Lazily ensures the `history` container exists with the right partition key.
+ * Safe to call on every request; the Cosmos SDK only issues the network call once.
+ */
+export async function historyContainer(): Promise<Container> {
+  if (_history && _historyEnsured) return _history;
+  if (!_historyEnsured) {
+    const db = getDatabase();
+    await db.containers.createIfNotExists({
+      id: 'history',
+      partitionKey: { paths: ['/workspaceId'] },
+    });
+    _historyEnsured = true;
+  }
+  if (!_history) _history = getDatabase().container('history');
+  return _history;
+}
+

@@ -11,7 +11,7 @@ function load(): Theme {
   } catch {
     // ignore
   }
-  return 'light';
+  return 'system';
 }
 function save(t: Theme) {
   try {

@@ -1,19 +1,21 @@
 import { create } from 'zustand';
 
-const STORAGE_KEY = 'reno-auth-code';
+const CODE_KEY = 'reno-auth-code';
+const USER_ID_KEY = 'reno-auth-user-id';
+const USER_NAME_KEY = 'reno-auth-user-name';
 
-function loadCode(): string | null {
+function load<T extends string | null>(key: string): T {
   try {
-    return localStorage.getItem(STORAGE_KEY);
+    return (localStorage.getItem(key) as T) ?? (null as T);
   } catch {
-    return null;
+    return null as T;
   }
 }
 
-function saveCode(code: string | null) {
+function save(key: string, value: string | null) {
   try {
-    if (code) localStorage.setItem(STORAGE_KEY, code);
-    else localStorage.removeItem(STORAGE_KEY);
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
   } catch {
     // ignore (private mode etc.)
   }
@@ -21,21 +23,36 @@ function saveCode(code: string | null) {
 
 interface AuthState {
   accessCode: string | null;
+  userId: string | null;
+  userName: string | null;
   setAccessCode: (code: string) => void;
+  setUser: (id: string, name: string) => void;
+  clearUser: () => void;
   logout: () => void;
 }
 
-// We read localStorage synchronously at store creation so the very first React render
-// already has the accessCode populated. Zustand's persist middleware hydrates after the
-// first render, which made ProtectedRoute redirect to /login briefly on every reload.
 export const useAuthStore = create<AuthState>((set) => ({
-  accessCode: loadCode(),
+  accessCode: load(CODE_KEY),
+  userId: load(USER_ID_KEY),
+  userName: load(USER_NAME_KEY),
   setAccessCode: (code) => {
-    saveCode(code);
+    save(CODE_KEY, code);
     set({ accessCode: code });
   },
+  setUser: (id, name) => {
+    save(USER_ID_KEY, id);
+    save(USER_NAME_KEY, name);
+    set({ userId: id, userName: name });
+  },
+  clearUser: () => {
+    save(USER_ID_KEY, null);
+    save(USER_NAME_KEY, null);
+    set({ userId: null, userName: null });
+  },
   logout: () => {
-    saveCode(null);
-    set({ accessCode: null });
+    save(CODE_KEY, null);
+    save(USER_ID_KEY, null);
+    save(USER_NAME_KEY, null);
+    set({ accessCode: null, userId: null, userName: null });
   },
 }));

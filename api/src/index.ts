@@ -10,3 +10,5 @@ import './functions/expenses';
 import './functions/details';
 import './functions/photos';
 import './functions/exchangeRate';
+import './functions/users';
+import './functions/history';

@@ -35,14 +35,51 @@ export interface Expense {
   _etag?: string;
 }
 
+export interface WorkspaceUser {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface Workspace {
   id: string;
   createdAt: string;
   isMaster: boolean;
+  users?: WorkspaceUser[];
 }
 
 export interface ExchangeRate {
   eurToRon: number;
   updatedAt: string;
-  source: 'BNR' | 'cache';
+  source: 'BNR' | 'cache' | 'fallback';
+}
+
+export type HistoryAction =
+  | 'expense.create'
+  | 'expense.update'
+  | 'expense.delete'
+  | 'detail.create'
+  | 'detail.update'
+  | 'detail.delete'
+  | 'photo.add'
+  | 'photo.delete';
+
+export type FieldDelta = { from: unknown; to: unknown };
+
+export interface HistoryEntry {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  userName: string;
+  timestamp: string;
+  action: HistoryAction;
+  expenseId: string;
+  expenseTitle: string;
+  changes?: Record<string, FieldDelta>;
+  detailName?: string;
+  detailChanges?: Record<string, FieldDelta>;
+  photoCount?: number;
+  price?: number;
+  currency?: 'RON' | 'EUR';
+  expensePriceMode?: PriceMode;
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,14 @@ export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'create'>('login');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const accessCode = useAuthStore((s) => s.accessCode);
+  const userId = useAuthStore((s) => s.userId);
   const setAccessCode = useAuthStore((s) => s.setAccessCode);
   const navigate = useNavigate();
+
+  // Already authenticated → bounce to the right place
+  if (accessCode && userId) return <Navigate to="/" replace />;
+  if (accessCode && !userId) return <Navigate to="/login/user" replace />;
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -26,7 +32,7 @@ export default function LoginPage() {
         return;
       }
       setAccessCode(code.trim());
-      navigate('/');
+      navigate('/login/user');
     } finally {
       setLoading(false);
     }
@@ -48,7 +54,7 @@ export default function LoginPage() {
       }
       toast.success('Cod creat. Bine ai venit!');
       setAccessCode(c);
-      navigate('/');
+      navigate('/login/user');
     } finally {
       setLoading(false);
     }

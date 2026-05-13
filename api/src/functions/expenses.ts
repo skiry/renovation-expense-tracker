@@ -1,6 +1,12 @@
 import { app, HttpRequest } from '@azure/functions';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireUser } from '../middleware/auth';
 import { expensesContainer } from '../services/cosmos';
+import {
+  auditExpenseCreate,
+  auditExpenseDelete,
+  auditExpenseUpdate,
+  diffExpense,
+} from '../services/audit';
 import { ok, noContent, badRequest, notFound, conflict, serverError } from '../shared/responses';
 import { slugifyTitle, uniqueSlug } from '../shared/slug';
 import { Expense } from '../shared/types';
@@ -34,6 +40,9 @@ app.http('expensesCollection', {
       }
 
       // POST
+      const userErr = requireUser(auth);
+      if (userErr) return userErr;
+
       const data = ((await request.json()) ?? {}) as Partial<Expense>;
       const title = (data.title ?? 'Cheltuială nouă').trim() || 'Cheltuială nouă';
       const isPriority = data.isPriority ?? false;
@@ -63,7 +72,19 @@ app.http('expensesCollection', {
       };
 
       const { resource, etag } = await expensesContainer().items.create(expense);
-      return ok(withPhotoUrls({ ...(resource as Expense), _etag: etag }));
+      const created = resource as Expense;
+
+      await auditExpenseCreate({
+        workspaceId: auth.accessCode,
+        userId: auth.user!.id,
+        userName: auth.user!.name,
+        expenseId: created.id,
+        expenseTitle: created.title,
+        price: created.estimatedPrice,
+        currency: created.estimatedCurrency,
+      });
+
+      return ok(withPhotoUrls({ ...created, _etag: etag }));
     } catch (err) {
       return serverError(err);
     }
@@ -80,6 +101,7 @@ app.http('reorderExpenses', {
     try {
       const auth = await authenticate(request);
       if (!('accessCode' in auth)) return auth;
+      // reorder is intentionally NOT audited (user decision)
       const ordered = ((await request.json()) ?? []) as { id: string; order: number }[];
       if (!Array.isArray(ordered)) return badRequest('Expected array of { id, order }');
 
@@ -130,11 +152,22 @@ app.http('expensesItem', {
       }
 
       if (request.method === 'DELETE') {
+        const userErr = requireUser(auth);
+        if (userErr) return userErr;
+
+        let deletedSnapshot: { title: string; price: number; currency: 'RON' | 'EUR' } | null = null;
         try {
           const { resource } = await expensesContainer().item(id, auth.accessCode).read<Expense>();
-          if (resource?.photos?.length) {
-            const { deletePhoto: delBlob } = await import('../services/blob');
-            await Promise.allSettled(resource.photos.map((p) => delBlob(p.blobName)));
+          if (resource) {
+            deletedSnapshot = {
+              title: resource.title,
+              price: resource.estimatedPrice,
+              currency: resource.estimatedCurrency,
+            };
+            if (resource.photos?.length) {
+              const { deletePhoto: delBlob } = await import('../services/blob');
+              await Promise.allSettled(resource.photos.map((p) => delBlob(p.blobName)));
+            }
           }
         } catch (err: any) {
           if (err?.code !== 404) throw err;
@@ -145,10 +178,25 @@ app.http('expensesItem', {
         } catch (err: any) {
           if (err?.code !== 404) throw err;
         }
+
+        if (deletedSnapshot) {
+          await auditExpenseDelete({
+            workspaceId: auth.accessCode,
+            userId: auth.user!.id,
+            userName: auth.user!.name,
+            expenseId: id,
+            expenseTitle: deletedSnapshot.title,
+            price: deletedSnapshot.price,
+            currency: deletedSnapshot.currency,
+          });
+        }
         return noContent();
       }
 
       // PATCH
+      const userErr = requireUser(auth);
+      if (userErr) return userErr;
+
       const patch = sanitizeForStorage(((await request.json()) ?? {}) as Partial<Expense>);
       const ifMatch = request.headers.get('if-match') || undefined;
 
@@ -181,7 +229,19 @@ app.http('expensesItem', {
         const { resource, etag } = await expensesContainer().item(id, auth.accessCode).replace(merged, {
           accessCondition: currentEtag ? { type: 'IfMatch', condition: currentEtag } : undefined,
         });
-        return ok(withPhotoUrls({ ...(resource as Expense), _etag: etag }));
+        const after = resource as Expense;
+
+        await auditExpenseUpdate({
+          workspaceId: auth.accessCode,
+          userId: auth.user!.id,
+          userName: auth.user!.name,
+          expenseId: id,
+          expenseTitle: after.title,
+          changes: diffExpense(current, after),
+          priceMode: after.priceMode,
+        });
+
+        return ok(withPhotoUrls({ ...after, _etag: etag }));
       } catch (err: any) {
         if (err?.code === 412) return conflict();
         throw err;
@@ -191,4 +251,5 @@ app.http('expensesItem', {
     }
   },
 });
+
 

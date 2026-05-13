@@ -1,7 +1,8 @@
 import { app, HttpRequest } from '@azure/functions';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireUser } from '../middleware/auth';
 import { expensesContainer } from '../services/cosmos';
 import { deletePhoto as deleteBlob, uploadPhoto } from '../services/blob';
+import { auditPhotoAdd, auditPhotoDelete } from '../services/audit';
 import { ok, badRequest, notFound, serverError } from '../shared/responses';
 import { Expense } from '../shared/types';
 import { newExpensePhoto, withPhotoUrls } from '../shared/transformers';
@@ -15,6 +16,8 @@ app.http('addPhoto', {
     try {
       const auth = await authenticate(request);
       if (!('accessCode' in auth)) return auth;
+      const userErr = requireUser(auth);
+      if (userErr) return userErr;
       const id = request.params.id;
       if (!id) return badRequest('Missing id');
 
@@ -31,7 +34,6 @@ app.http('addPhoto', {
       try {
         const { resource, etag } = await expensesContainer().item(id, auth.accessCode).read<Expense>();
         if (!resource) {
-          // If the expense vanished between auth and upload, delete the just-uploaded blob
           await deleteBlob(blobName);
           return notFound();
         }
@@ -40,10 +42,17 @@ app.http('addPhoto', {
         const { resource: updated } = await expensesContainer().item(id, auth.accessCode).replace(resource, {
           accessCondition: etag ? { type: 'IfMatch', condition: etag } : undefined,
         });
-        return ok(withPhotoUrls(updated as Expense));
+        const after = updated as Expense;
+        await auditPhotoAdd({
+          workspaceId: auth.accessCode,
+          userId: auth.user!.id,
+          userName: auth.user!.name,
+          expenseId: id,
+          expenseTitle: after.title,
+        });
+        return ok(withPhotoUrls(after));
       } catch (err: any) {
         if (err?.code === 412) {
-          // Conflict: retry once with fresh read
           const r = await expensesContainer().item(id, auth.accessCode).read<Expense>();
           if (!r.resource) {
             await deleteBlob(blobName);
@@ -52,7 +61,15 @@ app.http('addPhoto', {
           r.resource.photos.push(photo);
           r.resource.updatedAt = new Date().toISOString();
           const { resource: updated } = await expensesContainer().item(id, auth.accessCode).replace(r.resource);
-          return ok(withPhotoUrls(updated as Expense));
+          const after = updated as Expense;
+          await auditPhotoAdd({
+            workspaceId: auth.accessCode,
+            userId: auth.user!.id,
+            userName: auth.user!.name,
+            expenseId: id,
+            expenseTitle: after.title,
+          });
+          return ok(withPhotoUrls(after));
         }
         if (err?.code === 404) {
           await deleteBlob(blobName);
@@ -75,6 +92,8 @@ app.http('deletePhoto', {
     try {
       const auth = await authenticate(request);
       if (!('accessCode' in auth)) return auth;
+      const userErr = requireUser(auth);
+      if (userErr) return userErr;
       const id = request.params.id;
       const photoId = request.params.photoId;
       if (!id || !photoId) return badRequest('Missing id');
@@ -91,18 +110,33 @@ app.http('deletePhoto', {
         const { resource: updated } = await expensesContainer().item(id, auth.accessCode).replace(resource, {
           accessCondition: etag ? { type: 'IfMatch', condition: etag } : undefined,
         });
-        return ok(withPhotoUrls(updated as Expense));
+        const after = updated as Expense;
+        await auditPhotoDelete({
+          workspaceId: auth.accessCode,
+          userId: auth.user!.id,
+          userName: auth.user!.name,
+          expenseId: id,
+          expenseTitle: after.title,
+        });
+        return ok(withPhotoUrls(after));
       } catch (err: any) {
         if (err?.code === 404) return notFound();
         if (err?.code === 412) {
-          // Conflict: retry with fresh read
           const r = await expensesContainer().item(id, auth.accessCode).read<Expense>();
           if (!r.resource) return notFound();
           const target = r.resource.photos.find((p) => p.id === photoId);
           if (target) await deleteBlob(target.blobName);
           r.resource.photos = r.resource.photos.filter((p) => p.id !== photoId);
           const { resource: updated } = await expensesContainer().item(id, auth.accessCode).replace(r.resource);
-          return ok(withPhotoUrls(updated as Expense));
+          const after = updated as Expense;
+          await auditPhotoDelete({
+            workspaceId: auth.accessCode,
+            userId: auth.user!.id,
+            userName: auth.user!.name,
+            expenseId: id,
+            expenseTitle: after.title,
+          });
+          return ok(withPhotoUrls(after));
         }
         throw err;
       }
@@ -111,3 +145,4 @@ app.http('deletePhoto', {
     }
   },
 });
+
