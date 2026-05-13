@@ -102,17 +102,49 @@ Once A–F are checked, send me a message with:
 ## My steps (after you confirm)
 
 1. Create `api/` with Azure Functions Node 20 + TS:
-   - All endpoints (`/api/auth/*`, `/api/expenses`, `/api/expenses/:id`, `/api/expenses/:id/details`, `/api/expenses/:id/photos`, `/api/exchange-rate`).
-   - Auth middleware that reads `x-access-code` and validates against Cosmos.
+   - All endpoints (`/api/auth/*`, `/api/users`, `/api/expenses`, `/api/expenses/:id`, `/api/expenses/:id/details`, `/api/expenses/:id/photos`, `/api/exchange-rate`, `/api/history`).
+   - Auth middleware that reads `x-access-code` (and `x-user-id` for mutations) and validates against Cosmos.
    - Cosmos DB client with **ETag-based optimistic concurrency** (Phase 2 strategy B).
+   - Audit service that writes every create / update / delete to a `history` Cosmos container (auto-created on first write).
    - Blob client that uploads compressed photos → returns SAS URL valid 7 days.
    - BNR fetcher with 24h in-memory cache.
    - Auto bootstrap: on the first request, create workspace `MASTER_ACCESS_CODE` with `isMaster=true` if it doesn't exist.
-2. Enable **polling** in React Query (strategy C, 20s).
+2. Enable **polling** in React Query (strategy C, 20s, paused when the tab is not focused).
 3. Add `If-Match` headers + UI "Expense was modified" on 412 Conflict.
-4. Add `staticwebapp.config.json` route protection.
+4. Add `staticwebapp.config.json` route protection (placed under `web/public/` so Vite copies it into the deployment artifact).
 5. Verify local build with `func start` + `VITE_USE_MOCK=false`.
 6. Update `README.md` + `DEV_SETUP.md` with the real steps.
+
+---
+
+## Optional follow-ups after launch
+
+These are post-deploy hardening tasks. They're not required to make the app work, but they're cheap and recommended.
+
+### H. Application Insights (≈10 min, free)
+
+Captures HTTP request traces, exceptions with stack traces, and Cosmos/Blob dependency timings.
+
+1. Azure Portal → **Create a resource** → **Application Insights**.
+2. Same resource group (`rg-reno-tracker`), Workspace-based mode, let Azure create a new Log Analytics Workspace.
+3. Open the new resource → copy **Connection String** from Overview.
+4. Static Web App → **Settings → Environment variables** → add:
+   - Name: `APPLICATIONINSIGHTS_CONNECTION_STRING`
+   - Value: (paste)
+5. The Functions host detects the env var automatically — no code changes needed.
+
+See **DEV_SETUP §13** for verification queries.
+
+### I. Budget alerts (≈5 min, free)
+
+Get emailed before you ever spend more than expected.
+
+1. Azure Portal → **Cost Management** → **Budgets** → **+ Add**.
+2. Scope: `rg-reno-tracker`. Amount: `5` (USD/EUR). Reset: Monthly.
+3. Alerts: 50% (Actual), 80% (Actual), 100% (Forecasted), each emailed to you.
+4. Skip Action Groups — just use the "Alert recipients" email field.
+
+Typical realistic cost for this app is **~$0.40/month**, so $5 leaves ~12× margin. Any alert is a signal that something unexpected is happening.
 
 ---
 

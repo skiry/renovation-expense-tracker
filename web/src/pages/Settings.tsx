@@ -200,7 +200,6 @@ export default function SettingsPage() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               maxLength={40}
-              autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();

@@ -478,7 +478,7 @@ function AddExpenseFab({ defaultPriority = true }: { defaultPriority?: boolean }
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="t">Titlu</Label>
-            <Input id="t" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+            <Input id="t" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2 space-y-2">

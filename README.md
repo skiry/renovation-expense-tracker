@@ -9,15 +9,17 @@ Built as an Azure Static Web App (React frontend + Azure Functions API + Cosmos 
 ## ✨ Features
 
 - 🔐 **Multi-workspace** authentication via simple access codes — one master code + create-your-own codes (min 6 chars). Codes are stored as Cosmos documents; auth happens via an `x-access-code` header.
-- 📊 **Dashboard** with priority and non-priority sections, drag-and-drop reordering, summary card (priority / non-priority / grand total / spent), and a "hide paid items" toggle.
+- 👥 **Multi-user per workspace** — each access code can host multiple named users (e.g. "Bogdan", "Ioana"). After entering the code, you pick (or create) a user; that identity attaches to every change you make.
+- 📊 **Dashboard** with sticky Priority / Non-Priority tabs, drag-and-drop reordering inside the active tab, summary card (Total + Spent for the current tab), magnifier search across expense titles AND sub-expense names, and a "hide paid items" toggle (auto-hidden when no paid items).
 - 📝 **Expense detail** page with inline-edit title, priority and paid toggles, description, photos.
 - 🧮 **Estimated vs. detailed price mode** — switch per item. Estimated mode uses your rough estimate; detailed mode sums a list of named sub-expenses (each with own currency and paid flag).
 - 💵 **Multi-currency** (RON / EUR) with conversion to RON for all totals. Exchange rate fetched daily from BNR's public XML and cached server-side for 24h.
 - 📷 **Photos** — up to 20 per item, compressed in the browser (max 1920px, ~80% JPEG quality) before uploading to Azure Blob Storage. Served as 7-day SAS URLs.
-- 🌗 **Theme switcher** (light default · dark · system) — persisted in localStorage.
+- 🕐 **Audit history** — every create / update / delete / photo action is logged with the user's name and a per-field diff. History page groups entries by day, with `Important` / `Detailed` filter and click-to-expand modal showing before → after values.
+- 🌗 **Theme switcher** (system default · light · dark) — persisted in localStorage.
 - 📱 **Installable PWA** with custom icons (favicon, Apple Touch, maskable).
 - 🛜 **Offline reading** via service worker — app shell precached, last API responses kept as fallback. New writes still require connectivity.
-- 🔄 **Multi-user concurrency** — Cosmos DB ETag with `If-Match` headers; clients see "modified by someone else" toast on 412 and auto-refresh. Background polling every 20s keeps everyone in sync.
+- 🔄 **Multi-user concurrency** — Cosmos DB ETag with `If-Match` headers; clients see "modified by someone else" toast on 412 and auto-refresh. Background polling every 20s (focused tab only) keeps everyone in sync.
 - 🇷🇴 **Romanian UI**, mobile-first responsive layout.
 
 ## 🧱 Tech stack
@@ -37,10 +39,10 @@ Built as an Azure Static Web App (React frontend + Azure Functions API + Cosmos 
 ```
 RenovationExpenseTracker/
 ├── web/                          # React frontend (deployed as the SWA app)
-│   ├── public/                   # Static assets (icons, manifest, sw.js)
+│   ├── public/                   # Static assets (icons, manifest, sw.js, staticwebapp.config.json)
 │   └── src/
 │       ├── components/ui/        # shadcn-style primitives
-│       ├── pages/                # Login, Dashboard, ExpenseDetail, Settings, NotFound
+│       ├── pages/                # Login, UserSelect, Dashboard, ExpenseDetail, History, Settings, NotFound
 │       ├── services/             # api.ts (MockApi + HttpApi), mockData.ts
 │       ├── hooks/                # useExpenses.ts (React Query hooks)
 │       ├── store/                # auth, ui, theme (Zustand stores)
@@ -48,12 +50,11 @@ RenovationExpenseTracker/
 │       └── lib/utils.ts
 ├── api/                          # Azure Functions backend
 │   └── src/
-│       ├── functions/            # auth, expenses, details, photos, exchangeRate
-│       ├── services/             # cosmos, blob, bnr
+│       ├── functions/            # auth, users, expenses, details, photos, exchangeRate, history
+│       ├── services/             # cosmos, blob, bnr, audit
 │       ├── middleware/auth.ts
 │       └── shared/
 ├── .github/workflows/            # SWA CI/CD
-├── staticwebapp.config.json
 ├── DEV_SETUP.md                  # Step-by-step setup guide (English)
 ├── initial_instructions.md       # Quick reference for Phase 2 Azure setup
 └── README.md
@@ -198,13 +199,15 @@ For full Azure resource setup (Cosmos DB, Storage Account, SWA with all secrets)
 
 ## 🤝 Multi-user behavior
 
-- Each workspace (access code) is its own data island in Cosmos DB.
+- Each access code is its own data island in Cosmos DB (a "workspace").
+- Inside a workspace you can create multiple named users. After entering the code on `/login`, the user picker at `/login/user` lets you select or create your identity — that name is then attached to every change you make.
 - Concurrent edits use **ETag optimistic concurrency**: PATCH requests include `If-Match`; on mismatch the API returns 412 and the UI shows a toast + auto-refetches.
 - Background **polling** every 20 seconds (focused tab only) keeps everyone within the same workspace in near-real-time sync.
+- The **History page** (🕐 icon in the header) shows the audit log: who did what, when, with the before → after values for each changed field. Filter `Important` shows only price changes that matter (estimated price when the item is in estimated mode, sub-expense price when in detailed mode) plus create/delete. Filter `Detailed` shows everything.
 
 ## 💸 Cost
 
-With Cosmos DB on Serverless + Blob Storage Standard LRS + SWA Free plan, expect **$0–1/month** for personal use (a few hundred requests per day, a few hundred MB of photos).
+With Cosmos DB on Serverless + Blob Storage Standard LRS + SWA Free plan, expect **~$0.40/month** for personal use (a few hundred requests per day, a few hundred MB of photos). Most of the cost (~75%) comes from polling — which is automatically paused when the tab is not focused.
 
 ---
 

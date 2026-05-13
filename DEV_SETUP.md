@@ -18,6 +18,8 @@ A complete, beginner-friendly walkthrough of every step taken to build this app.
 10. [Deployment](#10-deployment)
 11. [PWA & offline support](#11-pwa--offline-support)
 12. [Switching between mock and Azure backend](#12-switching-between-mock-and-azure-backend)
+13. [Application Insights (monitoring)](#13-application-insights-monitoring)
+14. [Budgets & cost alerts](#14-budgets--cost-alerts)
 
 ---
 
@@ -81,13 +83,15 @@ The app helps a homeowner track renovation expenses across an entire apartment, 
 **Core features:**
 
 - **Multi-workspace authentication** via short access codes. The master code is set once via SWA application settings; anyone can create additional workspaces (each isolated) by picking a code of 6+ characters, validated unique.
+- **Multiple named users per workspace.** After typing the code, the user picks (or creates) a named identity (e.g. "Bogdan", "Ioana"); that identity attaches to every action.
+- **Audit history** — every create / update / delete on expenses, sub-expenses and photos is logged with the user's name, timestamp, and a per-field diff. The History page groups entries by day with an `Important` / `Detailed` filter.
 - **Expense items** with title, estimated price (RON or EUR), priority flag, optional description, optional photos.
 - **Detailed price breakdown** per item: list of sub-expenses (`name, price, currency, paid?`). Each item can be in *Estimated* mode (uses estimated price) or *Detailed* mode (sums sub-expenses). User toggles modes on the item detail page.
 - **Mark as paid** — at the whole-item level *or* individually per sub-expense.
-- **Dashboard totals** in RON: priority total, non-priority total, grand total, *spent so far*. EUR amounts are converted using BNR's daily exchange rate.
-- **Drag & drop** ordering inside priority and non-priority sections.
+- **Dashboard** with sticky `Priority` / `Non-Priority` tabs (default Priority), per-tab Total + Spent summary, magnifier search across expense titles AND sub-expense names. The "Hide paid items" toggle only appears when there is at least one paid item in the current tab.
+- **Drag & drop** ordering inside the active tab.
 - **Photos** — up to 20 per item, compressed in the browser before upload, stored in Azure Blob Storage and served as time-limited SAS URLs.
-- **Theme switcher** (light default / dark / system).
+- **Theme switcher** (system default / light / dark).
 - **PWA**: installable on phones with full icon set; service worker provides offline-read support.
 - **Romanian UI**, mobile-first responsive layout.
 
@@ -202,19 +206,25 @@ Selected at runtime via `import.meta.env.VITE_USE_MOCK` (default `'true'`; set t
 
 ### Routing
 
-- `/login` — public.
-- `/` — Dashboard (protected).
-- `/expense/:id` — Expense detail (protected).
-- `/settings` — Settings (protected).
+- `/login` — public. Type the access code, or switch to "Create code" (min 6 chars).
+- `/login/user` — public-after-code. Pick or create a named user for this session.
+- `/` — Dashboard (requires code + user).
+- `/expense/:id` — Expense detail (requires code + user).
+- `/history` — Audit log (requires code + user).
+- `/settings` — Settings (requires code + user).
 - `*` — NotFound page.
 
-`ProtectedRoute` checks `useAuthStore().accessCode` and redirects to `/login` if missing.
+`ProtectedRoute` checks `useAuthStore().accessCode` AND `userId`. If only the code is set, it redirects to `/login/user`. If neither is set, it redirects to `/login`. Visiting `/login` or `/login/user` while already authenticated bounces to the dashboard.
 
-### Stores (Zustand, persisted)
+### Stores (Zustand)
 
-- `auth.ts` — `{ accessCode, setAccessCode, logout }` → key `reno-auth`.
-- `ui.ts` — `{ hidePaid }` → key `reno-ui`.
-- `theme.ts` — `{ theme: 'light'|'dark'|'system' }` → key `reno-theme`. `applyTheme()` sets classes on `document.documentElement`.
+We dropped the `persist` middleware and read/write `localStorage` synchronously in each store factory. This guarantees the very first React render already has the persisted values populated, preventing redirect flicker through `/login` on reload.
+
+- `auth.ts` — `{ accessCode, userId, userName, setAccessCode, setUser, clearUser, logout }`. Keys: `reno-auth-code`, `reno-auth-user-id`, `reno-auth-user-name`.
+- `ui.ts` — `{ hidePaid }` → key `reno-ui-hide-paid`.
+- `theme.ts` — `{ theme: 'light'|'dark'|'system' }` → key `reno-theme`. Default `system`. `applyTheme()` sets classes on `document.documentElement`.
+
+> ⚠️ Selectors that return an *object* would create a new reference on every render and cause infinite re-renders inside React Query mutation hooks. Always select primitives separately (`s => s.accessCode`, `s => s.userId`) and combine them locally.
 
 ### Mock storage
 
@@ -280,18 +290,24 @@ api/
 |---|---|---|
 | POST | `/api/auth/verify` | Verify an access code (existence + isMaster). |
 | POST | `/api/auth/create` | Create a new workspace (6+ chars, unique). |
+| GET | `/api/users` | List users in the workspace. |
+| POST | `/api/users` | Create a new user (name 1-40 chars, unique within workspace). |
+| DELETE | `/api/users/{id}` | Delete a user (their history entries keep the name snapshot). |
 | GET | `/api/expenses` | List all expenses for the workspace. |
 | POST | `/api/expenses` | Create a new expense (slug-based ID). |
 | GET | `/api/expenses/{id}` | Get one expense (returns `_etag`). |
 | PATCH | `/api/expenses/{id}` | Update an expense (sends `If-Match`). |
 | DELETE | `/api/expenses/{id}` | Delete an expense + its photos. |
-| POST | `/api/expenses/reorder` | Bulk reorder. |
+| POST | `/api/expenses/reorder` | Bulk reorder (not audited). |
 | POST | `/api/expenses/{id}/details` | Add a sub-expense. |
 | PATCH | `/api/expenses/{id}/details/{detailId}` | Update a sub-expense. |
 | DELETE | `/api/expenses/{id}/details/{detailId}` | Delete a sub-expense. |
 | POST | `/api/expenses/{id}/photos` | Upload a photo (multipart). |
 | DELETE | `/api/expenses/{id}/photos/{photoId}` | Delete a photo (blob + Cosmos record). |
+| GET | `/api/history?limit=50&before=<iso>` | Paginated audit log for the workspace. |
 | GET, POST | `/api/exchange-rate` | Get cached BNR rate; POST forces refresh. |
+
+All mutation endpoints require an additional `x-user-id` header that must match one of the workspace's users; the value is recorded into the audit log.
 
 > ⚙️ Functions runtime can't have two registrations sharing the same route, even with different HTTP methods. Whenever we needed several methods per URL (e.g., `GET` + `PATCH` + `DELETE` on `/expenses/{id}`), we register a single handler with `methods: [...]` and dispatch by `request.method`.
 
@@ -301,10 +317,11 @@ api/
 
 ### Cosmos DB client
 
-Singleton `CosmosClient` initialized from `COSMOS_CONNECTION`. Two containers:
+Singleton `CosmosClient` initialized from `COSMOS_CONNECTION`. Three containers:
 
-- `workspaces` (PK `/id`)
-- `expenses` (PK `/workspaceId`)
+- `workspaces` (PK `/id`) — stores access codes + their nested `users[]` array.
+- `expenses` (PK `/workspaceId`) — one document per expense, sub-expenses and photo metadata inline.
+- `history` (PK `/workspaceId`) — audit log. Created lazily by the API on the first write via `containers.createIfNotExists`, so you don't need to provision it manually.
 
 ETag-based concurrency uses:
 
@@ -315,6 +332,15 @@ await container.item(id, partitionKey).replace(doc, {
 ```
 
 On 412, the API responds with HTTP 412 + `{ error: 'Resource was modified by another user' }`.
+
+### Audit service
+
+Every mutation in the API calls a helper in `services/audit.ts` after the DB update succeeds. The helper:
+
+- Computes a per-field diff (`{ from, to }`) for `expense.update` / `detail.update`.
+- Snapshots `price` + `currency` on `expense.create` / `expense.delete` / `detail.create` / `detail.delete` (so the UI can show the amount even after deletion).
+- Stores the parent expense's `priceMode` at write time, enabling the front-end's `Important` filter to know whether a sub-expense price change is "meaningful" for that expense.
+- Writes are fire-and-forget — a failing audit write must never block a user's primary action; it's logged via `console.warn` and the request still returns success.
 
 ### Blob client
 
@@ -509,3 +535,117 @@ The frontend reads `import.meta.env.VITE_USE_MOCK` at **build time**:
 > ⚠️ **`VITE_USE_MOCK` cannot be set via Azure SWA Application Settings.** Those settings are runtime-only and apply to the Functions API. Vite freezes the value during GitHub Actions build. If you ever needed a non-default value in production, you'd inject it as a GitHub Actions env var in the workflow YAML, or commit a `.env.production` file.
 
 Polling (`refetchInterval: 20s` on focused tab) automatically activates whenever `IS_MOCK === false`.
+
+---
+
+## 13. Application Insights (monitoring)
+
+Optional but recommended. Azure Application Insights captures HTTP request traces, exception stack traces, dependency timings (Cosmos / Blob), and offers a live metrics stream — for free under the 5 GB/month ingest cap, which this app won't approach.
+
+### A. Create the resource (≈5 min)
+
+1. Azure Portal → **Create a resource** → **Application Insights**.
+2. Settings:
+   - Resource group: `rg-reno-tracker`.
+   - Name: `appi-reno-tracker`.
+   - Region: same as SWA.
+   - Resource Mode: **Workspace-based**.
+   - Log Analytics Workspace: let Azure create a new one.
+3. Create.
+
+### B. Copy the connection string (≈1 min)
+
+Open the new App Insights resource → **Overview** → look for **Connection String** under Essentials (or Settings → Properties). Format:
+```
+InstrumentationKey=...;IngestionEndpoint=https://...;LiveEndpoint=https://...;
+```
+
+### C. Wire it into the SWA (≈2 min)
+
+Static Web App → **Settings → Environment variables** → **Add**:
+
+| Name | Value |
+|---|---|
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | (paste the connection string) |
+
+Save. SWA automatically restarts the Functions host, which detects the env var and instruments every HTTP request via the built-in Azure Functions Application Insights integration. No code changes required.
+
+### D. Verify
+
+Use the app (sign in, add or modify an expense). Within 1–2 minutes:
+
+- Application Insights → **Investigate → Transaction search** → see calls to `/api/*` with status, duration, dependency calls to Cosmos & Blob.
+- Application Insights → **Investigate → Failures** → grouped errors with stack traces.
+- Application Insights → **Investigate → Live Metrics** → real-time view useful when debugging.
+- Application Insights → **Logs** → custom KQL queries, e.g.:
+  ```kql
+  requests
+  | order by timestamp desc
+  | take 50
+  ```
+
+### Sampling
+
+`api/host.json` already enables sampling so noise is kept low without losing useful signals:
+
+```json
+"applicationInsights": {
+  "samplingSettings": { "isEnabled": true, "excludedTypes": "Request" }
+}
+```
+
+To disable telemetry, simply delete `APPLICATIONINSIGHTS_CONNECTION_STRING` from the SWA app settings.
+
+---
+
+## 14. Budgets & cost alerts
+
+Spend protection is essentially free. Set a generous monthly cap and have Azure email you long before you actually hit it.
+
+### A. Create a budget (≈5 min)
+
+1. Azure Portal → **Cost Management** (top search bar) → open it for your subscription.
+2. **Budgets** in the side menu → **+ Add**.
+3. Settings:
+   - **Scope**: `Resource group` → `rg-reno-tracker` (or the whole subscription if you prefer).
+   - **Name**: `budget-reno-tracker`.
+   - **Reset period**: `Monthly`.
+   - **Start date**: current month (default).
+   - **Expiration date**: leave default (≈5 years).
+   - **Amount**: `5` (USD/EUR depending on your billing currency — at typical usage this app costs well under $1/month, so $5 leaves plenty of headroom).
+4. **Next**.
+
+### B. Alert thresholds
+
+In the same wizard, add three alert conditions to get notified well before overspending:
+
+| % of budget | Type | Email |
+|---|---|---|
+| 50 | Actual | your email |
+| 80 | Actual | your email |
+| 100 | Forecasted | your email |
+
+- **Actual** alerts fire when you've already consumed the threshold.
+- **Forecasted** alerts fire when Azure predicts you'll exceed it by month-end — a useful early warning.
+
+You can skip Action Groups entirely and just use the **Alert recipients (email)** field. Action Groups are only needed for SMS, voice calls, or wiring alerts into Azure Mobile push / webhooks.
+
+### C. (Optional) Cost anomaly alerts
+
+Cost Management → **Cost alerts** → **+ Add** → **Anomaly**. Catches unexpected spikes versus your historical baseline. Free, recommended.
+
+### What budgets do *not* do
+
+Budgets **alert** but do not stop services automatically. A hard spending cap only exists on Visual Studio / Azure for Students subscriptions, not on pay-as-you-go. If you ever get an alert, investigate in **Cost analysis** (which service spiked) and react manually (e.g., delete a runaway resource).
+
+### Realistic cost expectation
+
+| Service | Monthly estimate |
+|---|---|
+| Cosmos DB Serverless | ~$0.20 |
+| Blob Storage (Standard LRS) | ~$0.20 |
+| Static Web App (Free) | $0.00 |
+| Application Insights | $0.00 |
+| **Total** | **~$0.40 / month** |
+
+A $5 budget gives you ~12× headroom; if you ever cross 50%, something is very wrong (e.g., spam traffic or a misconfiguration) and you'll have time to react.

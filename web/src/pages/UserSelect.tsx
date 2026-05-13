@@ -128,7 +128,6 @@ export default function UserSelectPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="ex: Bogdan"
-              autoFocus
               maxLength={40}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {

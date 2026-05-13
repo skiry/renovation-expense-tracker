@@ -602,7 +602,7 @@ function AddDetailButton({
         <div className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="dn">Nume</Label>
-            <Input id="dn" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            <Input id="dn" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2 space-y-2">
