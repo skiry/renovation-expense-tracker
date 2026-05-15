@@ -16,6 +16,7 @@ Built as an Azure Static Web App (React frontend + Azure Functions API + Cosmos 
 - 💵 **Multi-currency** (RON / EUR) with conversion to RON for all totals. Exchange rate fetched daily from BNR's public XML and cached server-side for 24h.
 - 📷 **Photos** — up to 20 per item, compressed in the browser (max 1920px, ~80% JPEG quality) before uploading to Azure Blob Storage. Served as 7-day SAS URLs.
 - 🕐 **Audit history** — every create / update / delete / photo action is logged with the user's name and a per-field diff. History page groups entries by day, with `Important` / `Detailed` filter and click-to-expand modal showing before → after values.
+- 🔔 **Web push notifications** — opt-in from Settings (or via the dismissible Dashboard banner). When another user creates/deletes an expense or changes a "meaningful" price (estimated price for items in *estimated* mode, sub-expense price for items in *detailed* mode), every other subscriber in the workspace gets a push. Works on Android Chrome, desktop Chrome/Firefox/Edge, and iOS 16.4+ **only when the app is installed to the Home Screen**.
 - 🌗 **Theme switcher** (system default · light · dark) — persisted in localStorage.
 - 📱 **Installable PWA** with custom icons (favicon, Apple Touch, maskable).
 - 🛜 **Offline reading** via service worker — app shell precached, last API responses kept as fallback. New writes still require connectivity.

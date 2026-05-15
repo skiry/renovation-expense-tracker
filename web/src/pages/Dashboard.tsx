@@ -41,6 +41,7 @@ import { displayPriceRon, spentForExpense } from '@/utils/calculations';
 import { formatRon, cn } from '@/lib/utils';
 import { useUiStore } from '@/store/ui';
 import { Expense, Currency } from '@/types';
+import { PushPromptBanner } from '@/components/PushPromptBanner';
 
 type Tab = 'priority' | 'non-priority';
 
@@ -91,6 +92,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
+      <PushPromptBanner />
       <SummaryCard tab={tab} totals={tabTotals} />
 
       {/* Sticky tab bar + search */}

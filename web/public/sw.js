@@ -2,7 +2,7 @@
 // Strategy: app-shell precache + stale-while-revalidate for assets + network-first for API GETs.
 // Bump SW_VERSION on each release to invalidate stale caches.
 
-const SW_VERSION = 'v1';
+const SW_VERSION = 'v2';
 const STATIC_CACHE = `reno-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `reno-runtime-${SW_VERSION}`;
 const API_CACHE = `reno-api-${SW_VERSION}`;
@@ -131,4 +131,51 @@ async function navigationFallback(request) {
 // Listen for skipWaiting message from the page (used to trigger update without manual reload)
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+// ---------------- Push notifications ----------------
+
+self.addEventListener('push', (event) => {
+  let data = { title: 'RenoTrack', body: '', url: '/', tag: 'reno', icon: '/pwa-192.png', badge: '/pwa-192.png' };
+  if (event.data) {
+    try {
+      data = { ...data, ...event.data.json() };
+    } catch {
+      data.body = event.data.text();
+    }
+  }
+  const promise = self.registration.showNotification(data.title, {
+    body: data.body,
+    tag: data.tag,
+    icon: data.icon,
+    badge: data.badge,
+    data: { url: data.url },
+  });
+  event.waitUntil(promise);
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || '/';
+  event.waitUntil(
+    (async () => {
+      const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      // If an app window is already open, focus it and navigate.
+      for (const client of allClients) {
+        if ('focus' in client) {
+          await client.focus();
+          if ('navigate' in client) {
+            try {
+              await client.navigate(targetUrl);
+            } catch {
+              // ignore — cross-origin or unsupported
+            }
+          }
+          return;
+        }
+      }
+      // Otherwise open a new window.
+      if (self.clients.openWindow) await self.clients.openWindow(targetUrl);
+    })()
+  );
 });

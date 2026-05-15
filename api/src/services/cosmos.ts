@@ -6,6 +6,8 @@ let _workspaces: Container | null = null;
 let _expenses: Container | null = null;
 let _history: Container | null = null;
 let _historyEnsured = false;
+let _pushSubs: Container | null = null;
+let _pushSubsEnsured = false;
 
 function getClient(): CosmosClient {
   if (_client) return _client;
@@ -50,5 +52,19 @@ export async function historyContainer(): Promise<Container> {
   }
   if (!_history) _history = getDatabase().container('history');
   return _history;
+}
+
+export async function pushSubscriptionsContainer(): Promise<Container> {
+  if (_pushSubs && _pushSubsEnsured) return _pushSubs;
+  if (!_pushSubsEnsured) {
+    const db = getDatabase();
+    await db.containers.createIfNotExists({
+      id: 'pushSubscriptions',
+      partitionKey: { paths: ['/workspaceId'] },
+    });
+    _pushSubsEnsured = true;
+  }
+  if (!_pushSubs) _pushSubs = getDatabase().container('pushSubscriptions');
+  return _pushSubs;
 }
 

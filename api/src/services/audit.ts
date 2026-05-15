@@ -1,5 +1,6 @@
 import { historyContainer } from './cosmos';
 import { uuid } from '../shared/slug';
+import { notifyImportant } from './push';
 import {
   Expense,
   ExpenseDetail,
@@ -28,12 +29,20 @@ async function write(entry: Omit<HistoryEntry, 'id' | 'timestamp'>) {
     timestamp: new Date().toISOString(),
   };
   const c = await historyContainer();
-  // Fire and forget — failures shouldn't block the user action.
   try {
     await c.items.create(fullEntry);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn('Audit write failed:', err);
+  }
+  // Fire-and-forget push fan-out. Awaiting it keeps it inside the function's
+  // execution context (so it actually runs on Azure) but errors are swallowed
+  // inside notifyImportant.
+  try {
+    await notifyImportant(fullEntry);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('Push notify failed:', err);
   }
 }
 

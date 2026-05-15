@@ -12,3 +12,4 @@ import './functions/photos';
 import './functions/exchangeRate';
 import './functions/users';
 import './functions/history';
+import './functions/push';

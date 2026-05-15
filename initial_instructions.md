@@ -146,6 +146,31 @@ Get emailed before you ever spend more than expected.
 
 Typical realistic cost for this app is **~$0.40/month**, so $5 leaves ~12× margin. Any alert is a signal that something unexpected is happening.
 
+### J. Web push notifications (≈10 min, free)
+
+Lets subscribed users receive a system notification whenever another workspace member makes an *Important* change (create, delete, or price update relevant to the current price mode). Works on Android Chrome, desktop browsers, and iOS 16.4+ **only when the PWA is installed to the Home Screen**.
+
+1. Generate VAPID keys locally (one time, takes 1 command):
+   ```powershell
+   cd api
+   node -e "const wp = require('web-push'); const k = wp.generateVAPIDKeys(); console.log('PUBLIC:', k.publicKey); console.log('PRIVATE:', k.privateKey);"
+   ```
+2. Static Web App → **Settings → Environment variables** → add three:
+
+   | Name | Value |
+   |---|---|
+   | `VAPID_PUBLIC_KEY` | the public key from step 1 |
+   | `VAPID_PRIVATE_KEY` | the private key from step 1 (**never share!**) |
+   | `VAPID_SUBJECT` | `mailto:your-email@example.com` (used by push providers if there's an issue with your service) |
+
+3. After Save, the SWA restarts automatically.
+4. In the app: Settings → "Notificări push" → Activează. iOS will ask for permission once; allow it.
+
+Notes:
+- Without these env vars the feature stays silently disabled — nothing breaks, the Settings card shows "Serverul nu are configurate cheile push" only after a click.
+- `web-push` library is already bundled in `api/` (no extra packages needed at deploy time).
+- A `pushSubscriptions` Cosmos container is created lazily on the first successful subscription.
+
 ---
 
 ## ⚠️ Important notes

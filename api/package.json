@@ -12,7 +12,9 @@
   "dependencies": {
     "@azure/cosmos": "^4.2.0",
     "@azure/functions": "^4.5.1",
-    "@azure/storage-blob": "^12.25.0"
+    "@azure/storage-blob": "^12.25.0",
+    "@types/web-push": "^3.6.4",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^20.16.11",

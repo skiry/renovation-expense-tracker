@@ -18,6 +18,7 @@ import { useAuthStore } from '@/store/auth';
 import { useThemeStore, type Theme } from '@/store/theme';
 import { IS_MOCK } from '@/services/api';
 import { cn } from '@/lib/utils';
+import { PushSettingsCard } from '@/components/PushPromptBanner';
 
 export default function SettingsPage() {
   const { data: rate, isLoading } = useExchangeRate();
@@ -73,6 +74,8 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <PushSettingsCard />
 
       <Card>
         <CardHeader>

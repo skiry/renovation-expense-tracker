@@ -53,6 +53,17 @@ export interface ExchangeRate {
   source: 'BNR' | 'cache' | 'fallback';
 }
 
+export interface PushSubscriptionRecord {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  userName: string;
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  deviceLabel?: string;
+  createdAt: string;
+}
+
 // ---------------------- Audit / History ----------------------
 
 export type HistoryAction =
