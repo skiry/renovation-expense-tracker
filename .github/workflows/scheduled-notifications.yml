@@ -1,0 +1,22 @@
+name: Run scheduled notifications
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub Actions cron has a minimum interval of 5 min and
+    # can sometimes drift by a few minutes under load, but for our purposes
+    # (workspace push reminders) that's well within tolerance.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping scheduled notifications runner
+        run: |
+          curl -sS -m 30 -X POST \
+            "https://yellow-ocean-06083dc03.7.azurestaticapps.net/api/run/scheduled-notifications" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            -w "\nHTTP %{http_code}\n"
