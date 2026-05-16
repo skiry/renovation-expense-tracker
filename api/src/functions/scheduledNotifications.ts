@@ -87,12 +87,14 @@ app.http('runScheduledNotifications', {
   },
 });
 
-// Admin endpoint to create/list scheduled notifications.
+// Admin-like endpoint to create/list scheduled notifications. We avoid the
+// `admin/...` URL because Azure Static Web Apps' platform middleware reserves
+// that path family and returns 404 before the Function is even invoked.
 // Auth: requires header x-master-code matching MASTER_ACCESS_CODE env var.
 app.http('scheduledNotificationsAdmin', {
   methods: ['POST', 'GET', 'OPTIONS'],
   authLevel: 'anonymous',
-  route: 'admin/scheduled-notifications',
+  route: 'scheduled-notifications',
   handler: async (request: HttpRequest) => {
     if (request.method === 'OPTIONS') return ok({});
     try {
