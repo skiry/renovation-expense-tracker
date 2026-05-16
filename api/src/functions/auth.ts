@@ -1,6 +1,7 @@
 import { app, HttpRequest } from '@azure/functions';
 import { workspacesContainer } from '../services/cosmos';
 import { ok, badRequest, serverError } from '../shared/responses';
+import { clientIp, rateLimit } from '../middleware/rateLimit';
 import { Workspace } from '../shared/types';
 
 app.http('verifyAccessCode', {
@@ -9,6 +10,10 @@ app.http('verifyAccessCode', {
   route: 'auth/verify',
   handler: async (request: HttpRequest) => {
     if (request.method === 'OPTIONS') return ok({});
+    // 10 attempts per minute per IP — enough for a few legitimate retries,
+    // but slow enough to make brute-forcing access codes impractical.
+    const throttled = rateLimit(`verify:${clientIp(request)}`, 10, 60_000);
+    if (throttled) return throttled;
     try {
       const body = (await request.json()) as { code?: string };
       const code = (body.code || '').trim();
@@ -38,6 +43,10 @@ app.http('createWorkspace', {
   route: 'auth/create',
   handler: async (request: HttpRequest) => {
     if (request.method === 'OPTIONS') return ok({});
+    // Same throttle for workspace creation, since the response leaks whether a
+    // code already exists.
+    const throttled = rateLimit(`create:${clientIp(request)}`, 10, 60_000);
+    if (throttled) return throttled;
     try {
       const body = (await request.json()) as { code?: string };
       const code = (body.code || '').trim();

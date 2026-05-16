@@ -1,6 +1,7 @@
 import { HttpRequest, HttpResponseInit } from '@azure/functions';
 import { workspacesContainer } from '../services/cosmos';
 import { unauthorized } from '../shared/responses';
+import { clientIp, rateLimit } from './rateLimit';
 import { Workspace, WorkspaceUser } from '../shared/types';
 
 export interface AuthContext {
@@ -17,11 +18,17 @@ export interface AuthContext {
  *
  * If the request also carries x-user-id, the matching user is attached to the context.
  *
- * Returns either an AuthContext (success) or an HttpResponseInit (401 to short-circuit).
+ * Returns either an AuthContext (success) or an HttpResponseInit (401 / 429 to short-circuit).
  */
 export async function authenticate(request: HttpRequest): Promise<AuthContext | HttpResponseInit> {
   const code = (request.headers.get('x-access-code') || '').trim();
   if (!code) return unauthorized('Missing x-access-code header');
+
+  // Throttle per IP across ALL authenticated endpoints. 120 req/min covers
+  // normal polling (3/min/page) for many users on the same IP, but stops
+  // brute-force attempts.
+  const throttled = rateLimit(`api:${clientIp(request)}`, 120, 60_000);
+  if (throttled) return throttled;
 
   const wsContainer = workspacesContainer();
 
