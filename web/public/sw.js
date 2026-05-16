@@ -2,7 +2,7 @@
 // Strategy: app-shell precache + stale-while-revalidate for assets + network-first for API GETs.
 // Bump SW_VERSION on each release to invalidate stale caches.
 
-const SW_VERSION = 'v2';
+const SW_VERSION = 'v3';
 const STATIC_CACHE = `reno-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `reno-runtime-${SW_VERSION}`;
 const API_CACHE = `reno-api-${SW_VERSION}`;

@@ -35,8 +35,34 @@ applyTheme(useThemeStore.getState().theme);
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        // Force update check on every page load so new SW versions are picked
+        // up promptly without a manual hard refresh.
+        reg.update().catch(() => null);
+        // If a new SW is waiting (installed but not yet activated), tell it to
+        // skip waiting so the user gets the latest version right away.
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        reg.addEventListener('updatefound', () => {
+          const installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              installing.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+      })
       .catch((err) => console.warn('SW registration failed:', err));
+
+    // When a new SW takes control, reload once so the page is served by the
+    // updated cache. Guarded with sessionStorage to avoid reload loops.
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    });
   });
 }
 
