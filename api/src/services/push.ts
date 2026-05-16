@@ -17,6 +17,88 @@ function ensureConfigured(): boolean {
   return true;
 }
 
+export interface PushPayload {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+  icon?: string;
+  badge?: string;
+}
+
+async function sendToSubscribers(subs: PushSubscriptionRecord[], payload: PushPayload) {
+  const container = await pushSubscriptionsContainer();
+  const json = JSON.stringify({
+    title: payload.title,
+    body: payload.body,
+    url: payload.url ?? '/',
+    tag: payload.tag ?? 'reno-generic',
+    icon: payload.icon ?? '/pwa-192.png',
+    badge: payload.badge ?? '/pwa-192.png',
+  });
+
+  await Promise.allSettled(
+    subs.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: sub.keys },
+          json,
+          { TTL: 60 * 60 * 24 }
+        );
+      } catch (err: any) {
+        const status = err?.statusCode;
+        if (status === 404 || status === 410) {
+          try {
+            await container.item(sub.id, sub.workspaceId).delete();
+          } catch {
+            // ignore
+          }
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn('Push send failed:', status, err?.body);
+        }
+      }
+    })
+  );
+}
+
+/** Send a push to specific user IDs (or all users) inside a workspace. */
+export async function sendPushToUsers(
+  workspaceId: string,
+  targetUserIds: string[] | 'all',
+  payload: PushPayload
+): Promise<{ delivered: number; total: number }> {
+  if (!ensureConfigured()) return { delivered: 0, total: 0 };
+
+  const container = await pushSubscriptionsContainer();
+  let query: { query: string; parameters: { name: string; value: any }[] };
+
+  if (targetUserIds === 'all') {
+    query = {
+      query: 'SELECT * FROM c WHERE c.workspaceId = @ws',
+      parameters: [{ name: '@ws', value: workspaceId }],
+    };
+  } else {
+    if (targetUserIds.length === 0) return { delivered: 0, total: 0 };
+    // ARRAY_CONTAINS workaround: use IN with bound params
+    const placeholders = targetUserIds.map((_, i) => `@u${i}`).join(', ');
+    query = {
+      query: `SELECT * FROM c WHERE c.workspaceId = @ws AND c.userId IN (${placeholders})`,
+      parameters: [
+        { name: '@ws', value: workspaceId },
+        ...targetUserIds.map((id, i) => ({ name: `@u${i}`, value: id })),
+      ],
+    };
+  }
+
+  const { resources: subs } = await container.items
+    .query<PushSubscriptionRecord>(query, { partitionKey: workspaceId })
+    .fetchAll();
+
+  await sendToSubscribers(subs, payload);
+  return { delivered: subs.length, total: subs.length };
+}
+
 /**
  * Decide whether an audit entry warrants a push notification.
  * Mirrors the "Important" filter in the History UI: creates, deletes, and
@@ -52,7 +134,7 @@ function deltaText(from: unknown, to: unknown, currency?: 'RON' | 'EUR'): string
   return `${from} → ${to}`;
 }
 
-function buildPayload(e: HistoryEntry) {
+function buildAuditPayload(e: HistoryEntry): PushPayload {
   const title = 'RenoTrack';
   let body = '';
   switch (e.action) {
@@ -82,8 +164,6 @@ function buildPayload(e: HistoryEntry) {
     body,
     url: `/expense/${e.expenseId}`,
     tag: `reno-${e.expenseId}`,
-    icon: '/pwa-192.png',
-    badge: '/pwa-192.png',
   };
 }
 
@@ -92,10 +172,7 @@ function buildPayload(e: HistoryEntry) {
  * user who performed the action. Failures are logged but never thrown.
  */
 export async function notifyImportant(entry: HistoryEntry): Promise<void> {
-  if (!ensureConfigured()) {
-    // VAPID keys not set — push disabled. No-op silently.
-    return;
-  }
+  if (!ensureConfigured()) return;
   if (!isImportantForPush(entry)) return;
 
   try {
@@ -114,33 +191,7 @@ export async function notifyImportant(entry: HistoryEntry): Promise<void> {
       .fetchAll();
 
     if (subs.length === 0) return;
-
-    const payload = JSON.stringify(buildPayload(entry));
-
-    await Promise.allSettled(
-      subs.map(async (sub) => {
-        try {
-          await webpush.sendNotification(
-            { endpoint: sub.endpoint, keys: sub.keys },
-            payload,
-            { TTL: 60 * 60 * 24 }
-          );
-        } catch (err: any) {
-          const status = err?.statusCode;
-          // 404 / 410 → subscription expired, remove from DB
-          if (status === 404 || status === 410) {
-            try {
-              await container.item(sub.id, sub.workspaceId).delete();
-            } catch {
-              // ignore
-            }
-          } else {
-            // eslint-disable-next-line no-console
-            console.warn('Push send failed:', status, err?.body);
-          }
-        }
-      })
-    );
+    await sendToSubscribers(subs, buildAuditPayload(entry));
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn('Push fan-out failed:', err);

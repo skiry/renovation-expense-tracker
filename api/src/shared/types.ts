@@ -64,6 +64,24 @@ export interface PushSubscriptionRecord {
   createdAt: string;
 }
 
+export type ScheduledTargetUserIds = string[] | 'all';
+
+export interface ScheduledNotification {
+  id: string;
+  workspaceId: string;
+  scheduledFor: string;
+  timezone?: string;
+  targetUserIds: ScheduledTargetUserIds;
+  title: string;
+  body: string;
+  url?: string;
+  status: 'pending' | 'sending' | 'sent' | 'failed';
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  sentAt?: string;
+}
+
 // ---------------------- Audit / History ----------------------
 
 export type HistoryAction =
