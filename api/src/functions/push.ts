@@ -56,6 +56,26 @@ app.http('pushSubscribe', {
         )
         .fetchAll();
 
+      // Also remove the same endpoint from OTHER workspaces (cross-workspace
+      // cleanup): if the same device switches workspace, it should no longer
+      // receive notifications from the previous one.
+      try {
+        const { resources: stale } = await container.items
+          .query<PushSubscriptionRecord>({
+            query: 'SELECT * FROM c WHERE c.endpoint = @ep AND c.workspaceId != @ws',
+            parameters: [
+              { name: '@ep', value: endpoint },
+              { name: '@ws', value: auth.accessCode },
+            ],
+          })
+          .fetchAll();
+        await Promise.allSettled(
+          stale.map((s) => container.item(s.id, s.workspaceId).delete())
+        );
+      } catch {
+        // best-effort, ignore
+      }
+
       // If the same endpoint exists, refresh its user binding and keys (device
       // can change owner if multiple users share a phone).
       if (existing.length > 0) {

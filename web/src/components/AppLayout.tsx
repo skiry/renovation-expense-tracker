@@ -4,6 +4,14 @@ import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/auth';
 import { useNavigate } from 'react-router-dom';
 import { IS_MOCK } from '@/services/api';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+
+/** Runs the push hook globally inside the protected layout so that the
+ * auto-resubscribe effect fires whenever the user switches workspace/user. */
+function PushAutoResubscribe() {
+  usePushNotifications();
+  return null;
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const logout = useAuthStore((s) => s.logout);
@@ -69,7 +77,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-4 sm:py-6 pb-24">{children}</main>
+      <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-4 sm:py-6 pb-24">
+        <PushAutoResubscribe />
+        {children}
+      </main>
     </div>
   );
 }

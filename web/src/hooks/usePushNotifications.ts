@@ -91,6 +91,47 @@ export function usePushNotifications(): UsePushResult {
     };
   }, [support.apiAvailable]);
 
+  // Auto-resubscribe whenever the auth context (workspace + user) changes:
+  // if the browser already has a push subscription AND permission granted,
+  // silently push the subscription to the backend so the new (workspace,user)
+  // combo is registered. Same endpoint in older workspaces is cleaned up
+  // server-side.
+  useEffect(() => {
+    if (!support.canEnable) return;
+    if (!accessCode || !userId) return;
+    if (permission !== 'granted') return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (!reg) return;
+        const sub = await reg.pushManager.getSubscription();
+        if (!sub) return;
+        const json = sub.toJSON();
+        await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-access-code': accessCode,
+            'x-user-id': userId,
+          },
+          body: JSON.stringify({
+            endpoint: json.endpoint,
+            keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
+            deviceLabel: userName ?? undefined,
+          }),
+        });
+        if (!cancelled) setSubscribed(true);
+      } catch {
+        // silent — user can manually toggle from Settings if needed
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessCode, userId, userName, permission, support.canEnable]);
+
   const enable = useCallback(async (): Promise<{ ok: boolean; reason?: string }> => {
     if (!support.canEnable) {
       return {
