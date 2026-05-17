@@ -131,6 +131,22 @@ Vite proxies `/api/*` to `http://127.0.0.1:7071`, so the frontend just calls `/a
 
 > ⚠️ The first `verifyAccessCode` call also bootstraps the master workspace into Cosmos if it doesn't exist yet.
 
+**One-liner shortcut (Windows):** spawn both terminals at once from the repo root:
+
+```powershell
+Start-Process cmd -ArgumentList "/k", "cd api && npm run build && func start"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd web; `$env:VITE_USE_MOCK='false'; npm run dev"
+```
+
+`cmd` is used for the API to sidestep PowerShell's default execution policy (which can block `func.ps1`). If you'd rather use only PowerShell, either run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` once in an admin shell, or pass `-ExecutionPolicy Bypass` to the second `Start-Process` call.
+
+**Troubleshooting: "Port 7071 is unavailable"** — a stale `func` process is still listening. Find and kill it:
+
+```powershell
+Get-NetTCPConnection -LocalPort 7071 -ErrorAction SilentlyContinue |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
+
 ---
 
 ## 🔀 Switching between mock and Azure backend
