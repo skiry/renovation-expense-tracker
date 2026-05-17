@@ -8,6 +8,7 @@ import SettingsPage from './pages/Settings';
 import HistoryPage from './pages/History';
 import NotFoundPage from './pages/NotFound';
 import SurprisePage from './pages/Surprise';
+import Surprise31Page from './pages/Surprise31';
 import AppLayout from './components/AppLayout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -69,6 +70,7 @@ export default function App() {
         }
       />
       <Route path="/surprise" element={<SurprisePage />} />
+      <Route path="/surprise31" element={<Surprise31Page />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
