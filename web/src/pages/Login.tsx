@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/store/auth';
-import { api } from '@/services/api';
+import { api, RateLimitError } from '@/services/api';
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'create'>('login');
@@ -21,6 +21,18 @@ export default function LoginPage() {
   if (accessCode && userId) return <Navigate to="/" replace />;
   if (accessCode && !userId) return <Navigate to="/login/user" replace />;
 
+  function handleApiError(err: unknown, fallback: string) {
+    if (err instanceof RateLimitError) {
+      const wait = err.retryAfterSec
+        ? ` Reîncearcă peste ${err.retryAfterSec} secunde.`
+        : '';
+      toast.error(`Prea multe încercări.${wait}`);
+      return;
+    }
+    const message = err instanceof Error ? err.message : fallback;
+    toast.error(message || fallback);
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!code.trim()) return;
@@ -33,6 +45,8 @@ export default function LoginPage() {
       }
       setAccessCode(code.trim());
       navigate('/login/user');
+    } catch (err) {
+      handleApiError(err, 'Nu am putut verifica codul. Reîncearcă.');
     } finally {
       setLoading(false);
     }
@@ -55,6 +69,8 @@ export default function LoginPage() {
       toast.success('Cod creat. Bine ai venit!');
       setAccessCode(c);
       navigate('/login/user');
+    } catch (err) {
+      handleApiError(err, 'Nu am putut crea codul. Reîncearcă.');
     } finally {
       setLoading(false);
     }

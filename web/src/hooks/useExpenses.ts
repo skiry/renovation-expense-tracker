@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api, ConflictError, IS_MOCK } from '@/services/api';
+import { api, ConflictError, IS_MOCK, RateLimitError } from '@/services/api';
 import { Expense, ExpenseDetail, WorkspaceUser } from '@/types';
 import { useAuthStore } from '@/store/auth';
 
@@ -103,7 +103,16 @@ function handleConflict(err: unknown, invalidate: () => void): void {
   if (err instanceof ConflictError) {
     toast.warning('Cheltuiala a fost modificată de altcineva. Reîncarc datele…');
     invalidate();
+    return;
   }
+  if (err instanceof RateLimitError) {
+    const wait = err.retryAfterSec ? ` Reîncearcă peste ${err.retryAfterSec} secunde.` : '';
+    toast.error(`Prea multe încercări.${wait}`);
+    return;
+  }
+  // Surface other errors so they don't fall through silently as unhandled rejections.
+  const message = err instanceof Error ? err.message : 'Eroare necunoscută';
+  toast.error(message);
 }
 
 function useAuthCode() {

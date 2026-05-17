@@ -478,6 +478,16 @@ export class ConflictError extends Error {
   }
 }
 
+/** Thrown when the server returns 429 Too Many Requests. */
+export class RateLimitError extends Error {
+  retryAfterSec: number | null;
+  constructor(message: string, retryAfterSec: number | null) {
+    super(message);
+    this.name = 'RateLimitError';
+    this.retryAfterSec = retryAfterSec;
+  }
+}
+
 class HttpApi implements IApi {
   private headers(accessCode?: string, userId?: string | null, ifMatch?: string): HeadersInit {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -499,6 +509,17 @@ class HttpApi implements IApi {
       headers: { ...this.headers(accessCode, userId, ifMatch), ...(init.headers ?? {}) },
     });
     if (res.status === 412) throw new ConflictError();
+    if (res.status === 429) {
+      let msg = 'Prea multe încercări. Reîncearcă peste câteva minute.';
+      try {
+        const body = await res.json();
+        if (body?.error) msg = body.error;
+      } catch {
+        // ignore
+      }
+      const retryAfter = parseInt(res.headers.get('Retry-After') || '', 10);
+      throw new RateLimitError(msg, Number.isFinite(retryAfter) ? retryAfter : null);
+    }
     if (!res.ok) {
       let msg = `API ${res.status}`;
       try {
