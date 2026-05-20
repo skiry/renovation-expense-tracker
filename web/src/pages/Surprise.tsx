@@ -1,11 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
-import { Heart, Sparkles, Lock, HelpCircle } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Sparkles, Lock, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import SurpriseJourney from './surprise/SurpriseJourney';
+
+const UNLOCK_STORAGE_KEY = 'reno.surprise.unlocked';
+
+function hashCode(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return String(h);
+}
 
 /**
  * Hidden surprise route. Anyone can navigate here, but a secret code is required
@@ -21,8 +30,15 @@ import { cn } from '@/lib/utils';
  */
 export default function SurprisePage() {
   const expected = (import.meta.env.VITE_SURPRISE_CODE ?? '').trim();
+  const expectedHash = useMemo(() => hashCode(expected.toLowerCase()), [expected]);
   const [code, setCode] = useState('');
-  const [unlocked, setUnlocked] = useState(false);
+  const [unlocked, setUnlocked] = useState(() => {
+    try {
+      return expected !== '' && localStorage.getItem(UNLOCK_STORAGE_KEY) === expectedHash;
+    } catch {
+      return false;
+    }
+  });
 
   // Failure state
   const [wrongAttempts, setWrongAttempts] = useState(0);
@@ -122,26 +138,7 @@ export default function SurprisePage() {
   }, [questionPos, hintParked]);
 
   if (unlocked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-pink-50 via-rose-50 to-amber-50 dark:from-pink-950/30 dark:via-rose-950/30 dark:to-amber-950/20">
-        <Card className="w-full max-w-md border-pink-200 dark:border-pink-900/40 shadow-xl">
-          <CardContent className="p-8 text-center space-y-5">
-            <div className="text-6xl mx-auto">💝</div>
-            <h1 className="text-3xl font-bold tracking-tight">Te iubesc!</h1>
-            <p className="text-base leading-relaxed text-muted-foreground">
-              Aceasta e o surpriză micuță pentru tine. În curând o să adăugăm aici un slideshow cu amintirile
-              noastre și un traseu de aventură doar pentru noi doi.
-            </p>
-            <div className="flex items-center justify-center gap-2 text-pink-600 dark:text-pink-400">
-              <Heart className="h-5 w-5 fill-current" />
-              <Sparkles className="h-5 w-5" />
-              <Heart className="h-5 w-5 fill-current" />
-            </div>
-            <p className="text-xs text-muted-foreground pt-3">Verifică din nou pagina curând — va crește 🌱</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <SurpriseJourney />;
   }
 
   return (
@@ -259,6 +256,11 @@ export default function SurprisePage() {
             <Button
               onClick={() => {
                 setPendingUnlock(false);
+                try {
+                  localStorage.setItem(UNLOCK_STORAGE_KEY, expectedHash);
+                } catch {
+                  /* ignore */
+                }
                 setUnlocked(true);
               }}
             >
