@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Heart, Sparkles, Lock, Delete } from 'lucide-react';
+import { Lock, Delete } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import SurpriseStory from './SurpriseStory';
 
 type Cell = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'X' | 'BACK';
 
@@ -42,10 +43,25 @@ function shuffle<T>(arr: readonly T[]): T[] {
  *
  * Validation runs ONLY when the entered code length is exactly TARGET_LENGTH.
  */
+const STORAGE_KEY = 'reno.surprise31.unlocked';
+
+function hashCode(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return String(h);
+}
+
 export default function Surprise31Page() {
   const expected = (import.meta.env.VITE_SURPRISE_CODE ?? '').trim();
+  const expectedHash = useMemo(() => hashCode(expected.toLowerCase()), [expected]);
   const [code, setCode] = useState('');
-  const [unlocked, setUnlocked] = useState(false);
+  const [unlocked, setUnlocked] = useState(() => {
+    try {
+      return expected !== '' && localStorage.getItem(STORAGE_KEY) === expectedHash;
+    } catch {
+      return false;
+    }
+  });
   const [shake, setShake] = useState(false);
   const [cells, setCells] = useState<Cell[]>(INITIAL_LAYOUT);
   /** When true, all cells display "X" and the reveal animation runs. */
@@ -121,6 +137,11 @@ export default function Surprise31Page() {
   useEffect(() => {
     if (!expected || code.length !== TARGET_LENGTH) return;
     if (code.toLowerCase() === expected.toLowerCase()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, expectedHash);
+      } catch {
+        /* ignore storage errors (private mode, etc.) */
+      }
       setUnlocked(true);
     } else {
       setShake(true);
@@ -187,26 +208,7 @@ export default function Surprise31Page() {
   const tracking = useMemo(() => (code ? 'tracking-[0.4em]' : ''), [code]);
 
   if (unlocked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-pink-50 via-rose-50 to-amber-50 dark:from-pink-950/30 dark:via-rose-950/30 dark:to-amber-950/20">
-        <Card className="w-full max-w-md border-pink-200 dark:border-pink-900/40 shadow-xl">
-          <CardContent className="p-8 text-center space-y-5">
-            <div className="text-6xl mx-auto">💝</div>
-            <h1 className="text-3xl font-bold tracking-tight">Te iubesc!</h1>
-            <p className="text-base leading-relaxed text-muted-foreground">
-              Aceasta e o surpriză micuță pentru tine. În curând o să adăugăm aici un slideshow cu amintirile
-              noastre și un traseu de aventură doar pentru noi doi.
-            </p>
-            <div className="flex items-center justify-center gap-2 text-pink-600 dark:text-pink-400">
-              <Heart className="h-5 w-5 fill-current" />
-              <Sparkles className="h-5 w-5" />
-              <Heart className="h-5 w-5 fill-current" />
-            </div>
-            <p className="text-xs text-muted-foreground pt-3">Verifică din nou pagina curând — va crește 🌱</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <SurpriseStory />;
   }
 
   return (
@@ -295,10 +297,16 @@ function KeypadButton({
         onClick();
       }}
       className={cn(
-        'h-14 rounded-lg border bg-card text-xl font-medium transition-colors flex items-center justify-center select-none active:scale-95 hover:bg-accent border-border',
+        'h-14 rounded-lg border bg-card text-xl font-medium transition-colors flex items-center justify-center select-none active:scale-95 border-border',
+        // Only apply hover on devices that actually have a hover-capable
+        // pointer (mouse/trackpad). On iOS, plain `hover:` sticks after a
+        // tap until the user taps elsewhere.
+        '[@media(hover:hover)]:hover:bg-accent',
         // Suppress the persistent focus ring on click; keep it for keyboard
         // users via :focus-visible.
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        // Remove the iOS gray tap flash overlay.
+        '[-webkit-tap-highlight-color:transparent]'
       )}
       {...rest}
     >
