@@ -189,9 +189,10 @@ export default function SurpriseStory() {
       <section className="snap-start min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-950/30 dark:to-rose-950/30 px-6">
         <div className="text-center space-y-4 max-w-md">
           <Heart className="h-10 w-10 mx-auto text-pink-500 fill-current" />
-          <h2 className="text-3xl font-bold">Te iubesc</h2>
+          <h2 className="text-3xl font-bold">Te iubesc 💕</h2>
           <p className="text-muted-foreground">
-            Mai e mult de adăugat aici. Pe curând 🌱
+            Putem continua să ne uităm la tot albumul când vom ajunge acasă.💕 Acum hai să ne
+            bucurăm de Helsinki și de vacanță.💕
           </p>
         </div>
       </section>
