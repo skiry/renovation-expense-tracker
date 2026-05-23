@@ -1,4 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -13,9 +24,9 @@ import { cn } from '@/lib/utils';
  * complementary edges (one tab + one blank), so they visually interlock when
  * placed next to each other.
  *
- * Interaction: tap a piece to select it, tap another piece to swap their
- * positions. When every piece sits in its original slot, the puzzle is solved
- * and the full photo fades in with a caption.
+ * Interaction: drag a piece onto another to swap them (powered by
+ * @dnd-kit/sortable). When every piece sits in its original slot, the full
+ * photo fades in with a caption.
  */
 
 // ─── Configuration ──────────────────────────────────────────────────────────
@@ -28,9 +39,8 @@ const TOTAL = COLS * ROWS;
 const PIECE = 100;
 const KNOB_RATIO = 0.2;
 const KNOB = PIECE * KNOB_RATIO;
-const BOX = PIECE + KNOB * 2; // full bounding box of one piece (including tabs)
+const BOX = PIECE + KNOB * 2;
 
-/** Placeholder photo (square crop). User will replace with real one later. */
 const PUZZLE_IMG = 'https://images.unsplash.com/photo-1518621736915-f3b1c41bfd00?w=600&h=600&fit=crop&auto=format';
 const PUZZLE_CAPTION = 'Felicitări, purkeluso! 💕';
 
@@ -39,11 +49,6 @@ type PieceEdges = { top: Edge; right: Edge; bottom: Edge; left: Edge };
 
 // ─── Edge generation ────────────────────────────────────────────────────────
 
-/**
- * Build a 3x3 grid of {top,right,bottom,left} edge specs. Outer edges are
- * 'flat'. Each interior shared edge is randomly 'tab' on one side and 'blank'
- * on the other.
- */
 function generateEdges(): PieceEdges[][] {
   const grid: PieceEdges[][] = Array.from({ length: ROWS }, () =>
     Array.from({ length: COLS }, () => ({
@@ -70,37 +75,23 @@ function generateEdges(): PieceEdges[][] {
   return grid;
 }
 
-// ─── Puzzle-piece SVG path ──────────────────────────────────────────────────
-
-/**
- * Build the SVG path describing the silhouette of one piece, expressed in the
- * piece-box coordinate system (origin top-left, size BOX x BOX). The piece
- * body sits at (KNOB, KNOB) to (KNOB+PIECE, KNOB+PIECE); tabs bump outward
- * into the surrounding KNOB-wide margin.
- */
 function piecePath(edges: PieceEdges): string {
-  // shorthand
   const p = PIECE;
   const k = KNOB;
-  const o = k; // origin offset
-  // tab/blank knob "control points": the knob occupies the middle 40% of an
-  // edge (from 30% to 70%), then bumps out by ~k.
+  const o = k;
   const s1 = p * 0.3;
   const s2 = p * 0.7;
-  const bump = k; // depth of the knob
+  const bump = k;
 
   let d = `M ${o} ${o}`;
-
-  // Top edge: o,o -> o+p, o
   if (edges.top === 'flat') {
     d += ` L ${o + p} ${o}`;
   } else {
-    const dir = edges.top === 'tab' ? -1 : 1; // tab goes up (negative y), blank goes down
+    const dir = edges.top === 'tab' ? -1 : 1;
     d += ` L ${o + s1} ${o}`;
     d += ` C ${o + s1} ${o + dir * bump}, ${o + s2} ${o + dir * bump}, ${o + s2} ${o}`;
     d += ` L ${o + p} ${o}`;
   }
-  // Right edge: o+p,o -> o+p, o+p
   if (edges.right === 'flat') {
     d += ` L ${o + p} ${o + p}`;
   } else {
@@ -109,7 +100,6 @@ function piecePath(edges: PieceEdges): string {
     d += ` C ${o + p + dir * bump} ${o + s1}, ${o + p + dir * bump} ${o + s2}, ${o + p} ${o + s2}`;
     d += ` L ${o + p} ${o + p}`;
   }
-  // Bottom edge: o+p, o+p -> o, o+p
   if (edges.bottom === 'flat') {
     d += ` L ${o} ${o + p}`;
   } else {
@@ -118,7 +108,6 @@ function piecePath(edges: PieceEdges): string {
     d += ` C ${o + s2} ${o + p + dir * bump}, ${o + s1} ${o + p + dir * bump}, ${o + s1} ${o + p}`;
     d += ` L ${o} ${o + p}`;
   }
-  // Left edge: o, o+p -> o, o
   if (edges.left === 'flat') {
     d += ` L ${o} ${o}`;
   } else {
@@ -142,14 +131,12 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-/** Ensure the initial shuffle isn't accidentally solved. */
 function shuffleNotSolved(): number[] {
   const ids = Array.from({ length: TOTAL }, (_, i) => i);
   for (let tries = 0; tries < 20; tries++) {
     const s = shuffle(ids);
     if (s.some((id, i) => id !== i)) return s;
   }
-  // Fallback: swap first two.
   return ids.slice().reverse();
 }
 
@@ -162,35 +149,33 @@ export default function PuzzlePhase({ onComplete }: { onComplete: () => void }) 
     [edges]
   );
 
-  // placement[slotIndex] = pieceId (original position). solved when placement[i] === i.
+  /** placement[slotIndex] = pieceId. Solved when placement[i] === i for all i. */
   const [placement, setPlacement] = useState<number[]>(() => shuffleNotSolved());
-  const [selected, setSelected] = useState<number | null>(null);
   const [solved, setSolved] = useState(false);
 
   const totalSize = PIECE * COLS;
 
-  const onTapSlot = useCallback(
-    (slot: number) => {
-      if (solved) return;
-      setSelected((prev) => {
-        if (prev === null) return slot;
-        if (prev === slot) return null;
-        // swap
-        setPlacement((arr) => {
-          const next = arr.slice();
-          [next[prev], next[slot]] = [next[slot], next[prev]];
-          return next;
-        });
-        return null;
-      });
-    },
-    [solved]
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } })
   );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setPlacement((cur) => {
+      const fromSlot = cur.indexOf(active.id as number);
+      const toSlot = cur.indexOf(over.id as number);
+      if (fromSlot === -1 || toSlot === -1) return cur;
+      const next = cur.slice();
+      [next[fromSlot], next[toSlot]] = [next[toSlot], next[fromSlot]];
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (placement.every((id, i) => id === i) && !solved) {
       setSolved(true);
-      setSelected(null);
     }
   }, [placement, solved]);
 
@@ -199,17 +184,16 @@ export default function PuzzlePhase({ onComplete }: { onComplete: () => void }) 
       <header className="text-center space-y-1">
         <h2 className="text-xl font-semibold">Nivel 1 · Puzzle</h2>
         <p className="text-sm text-muted-foreground">
-          Atinge două piese pentru a le schimba între ele. Pune-le în ordinea corectă pentru a
-          dezvălui poza.
+          Trage piesele cu degetul pentru a le schimba între ele. Pune-le în ordinea corectă
+          pentru a dezvălui poza.
         </p>
       </header>
 
       {/* Board */}
       <div
-        className="relative mx-auto rounded-xl bg-gradient-to-br from-pink-100/60 to-amber-100/60 dark:from-pink-950/40 dark:to-amber-950/30 shadow-inner overflow-hidden"
+        className="relative mx-auto rounded-xl bg-gradient-to-br from-pink-100/60 to-amber-100/60 dark:from-pink-950/40 dark:to-amber-950/30 shadow-inner overflow-hidden touch-none"
         style={{ width: totalSize, height: totalSize }}
       >
-        {/* Solved overlay: the full image fades in on top of the puzzle */}
         <img
           src={PUZZLE_IMG}
           alt=""
@@ -219,75 +203,36 @@ export default function PuzzlePhase({ onComplete }: { onComplete: () => void }) 
           )}
         />
 
-        {/* Slot cells with tap targets (drawn under the pieces) */}
-        {Array.from({ length: TOTAL }).map((_, slot) => {
-          const c = slot % COLS;
-          const r = Math.floor(slot / COLS);
-          return (
-            <button
-              key={`slot-${slot}`}
-              type="button"
-              onClick={() => onTapSlot(slot)}
-              aria-label={`Slot ${slot + 1}`}
-              className={cn(
-                'absolute border border-dashed transition-colors',
-                solved ? 'border-transparent' : 'border-border/30',
-                selected === slot && !solved && 'border-pink-500 bg-pink-500/10'
-              )}
-              style={{
-                left: c * PIECE,
-                top: r * PIECE,
-                width: PIECE,
-                height: PIECE,
-              }}
-            />
-          );
-        })}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={placement} strategy={rectSortingStrategy} disabled={solved}>
+            {placement.map((pieceId, slot) => {
+              const slotC = slot % COLS;
+              const slotR = Math.floor(slot / COLS);
+              const origC = pieceId % COLS;
+              const origR = Math.floor(pieceId / COLS);
+              const path = paths[origR][origC];
+              return (
+                <PuzzlePiece
+                  key={pieceId}
+                  pieceId={pieceId}
+                  left={slotC * PIECE - KNOB}
+                  top={slotR * PIECE - KNOB}
+                  path={path}
+                  origC={origC}
+                  origR={origR}
+                  hidden={solved}
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
 
-        {/* Pieces (one per slot, rendered with the piece currently at that slot) */}
-        {placement.map((pieceId, slot) => {
-          const slotC = slot % COLS;
-          const slotR = Math.floor(slot / COLS);
-          const origC = pieceId % COLS;
-          const origR = Math.floor(pieceId / COLS);
-          const path = paths[origR][origC];
-          const isSelected = selected === slot;
-          return (
-            <div
-              key={pieceId}
-              onClick={() => onTapSlot(slot)}
-              className={cn(
-                'absolute transition-all duration-300 ease-out cursor-pointer',
-                solved ? 'opacity-0' : 'opacity-100',
-                isSelected && 'z-20'
-              )}
-              style={{
-                width: BOX,
-                height: BOX,
-                // Position the piece so its body sits in the slot. The piece
-                // box extends KNOB pixels beyond on every side.
-                left: slotC * PIECE - KNOB,
-                top: slotR * PIECE - KNOB,
-                clipPath: `path('${path}')`,
-                WebkitClipPath: `path('${path}')`,
-                // Render the full puzzle photo, offset so that this piece's
-                // own region shows under its silhouette.
-                backgroundImage: `url(${PUZZLE_IMG})`,
-                backgroundSize: `${COLS * PIECE}px ${ROWS * PIECE}px`,
-                backgroundPosition: `${-origC * PIECE + KNOB}px ${-origR * PIECE + KNOB}px`,
-                filter: isSelected ? 'drop-shadow(0 0 8px rgb(236 72 153))' : undefined,
-                transform: isSelected ? 'scale(1.03)' : 'scale(1)',
-              }}
-            />
-          );
-        })}
-
-        {/*
-          Outline overlay: a single SVG drawn on top with one <path> per piece
-          that is NOT yet in its correct position. We draw the outline as a
-          separate layer (not as a border on the clipped div, since clip-path
-          strips borders) so it can fade as pieces snap into place.
-        */}
+        {/* Outline overlay: white stroke around each piece that isn't yet
+            in its correct slot. */}
         {!solved && (
           <svg
             className="absolute inset-0 pointer-events-none"
@@ -302,8 +247,6 @@ export default function PuzzlePhase({ onComplete }: { onComplete: () => void }) 
               const origC = pieceId % COLS;
               const origR = Math.floor(pieceId / COLS);
               const path = paths[origR][origC];
-              // The path is in piece-box coords (BOX x BOX, with body at +KNOB).
-              // Translate so the body lands at (slotC*PIECE, slotR*PIECE).
               return (
                 <g
                   key={`outline-${pieceId}`}
@@ -315,7 +258,6 @@ export default function PuzzlePhase({ onComplete }: { onComplete: () => void }) 
                     stroke="white"
                     strokeWidth={1.5}
                     strokeOpacity={0.85}
-                    style={{ transition: 'stroke-opacity 300ms' }}
                   />
                 </g>
               );
@@ -324,7 +266,6 @@ export default function PuzzlePhase({ onComplete }: { onComplete: () => void }) 
         )}
       </div>
 
-      {/* Caption + continue */}
       {solved ? (
         <div className="text-center space-y-4 animate-in fade-in duration-700">
           <p className="text-base font-medium">{PUZZLE_CAPTION}</p>
@@ -335,10 +276,61 @@ export default function PuzzlePhase({ onComplete }: { onComplete: () => void }) 
       ) : (
         <Card className="bg-muted/40 border-dashed">
           <CardContent className="p-3 text-center text-xs text-muted-foreground">
-            Atinge o piesă pentru a o selecta, apoi atinge alta pentru a le schimba locul.
+            Apasă pe o piesă și trage-o peste alta pentru a le schimba locul.
           </CardContent>
         </Card>
       )}
     </div>
+  );
+}
+
+function PuzzlePiece({
+  pieceId,
+  left,
+  top,
+  path,
+  origC,
+  origR,
+  hidden,
+}: {
+  pieceId: number;
+  left: number;
+  top: number;
+  path: string;
+  origC: number;
+  origR: number;
+  hidden: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: pieceId,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        'absolute touch-none [-webkit-tap-highlight-color:transparent] cursor-grab active:cursor-grabbing',
+        hidden ? 'opacity-0' : 'opacity-100',
+        isDragging ? 'z-30' : 'z-10'
+      )}
+      style={{
+        width: BOX,
+        height: BOX,
+        left,
+        top,
+        // Combine the sortable transform (from dnd-kit) with our own scale when
+        // dragging. Falling back to the identity when no transform is active.
+        transform: CSS.Transform.toString(transform) ?? undefined,
+        transition,
+        clipPath: `path('${path}')`,
+        WebkitClipPath: `path('${path}')`,
+        backgroundImage: `url(${PUZZLE_IMG})`,
+        backgroundSize: `${COLS * PIECE}px ${ROWS * PIECE}px`,
+        backgroundPosition: `${-origC * PIECE + KNOB}px ${-origR * PIECE + KNOB}px`,
+        filter: isDragging ? 'drop-shadow(0 6px 12px rgba(236, 72, 153, 0.55))' : undefined,
+      }}
+    />
   );
 }
