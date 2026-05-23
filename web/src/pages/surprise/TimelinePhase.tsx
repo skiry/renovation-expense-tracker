@@ -9,6 +9,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
+import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
 import {
   SortableContext,
   useSortable,
@@ -117,7 +118,12 @@ export default function TimelinePhase({ onComplete }: { onComplete: () => void }
         </p>
       </header>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+        modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      >
         <div className="flex gap-3">
           {/* Fixed year column */}
           <ul className="space-y-2 shrink-0" aria-hidden="true">
