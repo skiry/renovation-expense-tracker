@@ -32,7 +32,7 @@ const BOX = PIECE + KNOB * 2; // full bounding box of one piece (including tabs)
 
 /** Placeholder photo (square crop). User will replace with real one later. */
 const PUZZLE_IMG = 'https://images.unsplash.com/photo-1518621736915-f3b1c41bfd00?w=600&h=600&fit=crop&auto=format';
-const PUZZLE_CAPTION = 'Prima noastră poză împreună ✨';
+const PUZZLE_CAPTION = 'Felicitări, purkeluso! 💕';
 
 type Edge = 'flat' | 'tab' | 'blank';
 type PieceEdges = { top: Edge; right: Edge; bottom: Edge; left: Edge };
