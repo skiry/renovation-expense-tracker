@@ -53,11 +53,9 @@ export default function SurpriseStory() {
 
   // While this page is mounted, enable CSS scroll-snap on the document so
   // each photo section snaps fully into view. The stage above it has no
-  // snap-align, so scrubbing the video isn't interrupted.
-  //
-  // `proximity` (not `mandatory`) so the video stage remains freely scrollable
-  // — mandatory would prevent any scroll from landing inside the stage because
-  // the stage has no snap point.
+  // snap-align, so we keep snap OFF while the user is inside the stage and
+  // toggle it to `y mandatory` once they cross past the stage's end. That
+  // way scrubbing the video stays free and photos snap reliably.
   useEffect(() => {
     // Start at the very top when this page mounts so the user actually sees
     // the video stage instead of getting dropped past it.
@@ -66,13 +64,29 @@ export default function SurpriseStory() {
     const html = document.documentElement;
     const prevSnap = html.style.scrollSnapType;
     const prevBehavior = html.style.scrollBehavior;
-    html.style.scrollSnapType = 'y proximity';
+    html.style.scrollSnapType = 'none';
     html.style.scrollBehavior = 'smooth';
+
+    function update() {
+      const stage = stageRef.current;
+      if (!stage) return;
+      const stageBottom = stage.offsetTop + stage.offsetHeight;
+      // Engage mandatory snap only when fully past the stage so the user can
+      // still scroll back up into the video without being yanked forward.
+      const past = window.scrollY >= stageBottom - 1;
+      html.style.scrollSnapType = past ? 'y mandatory' : 'none';
+    }
+
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
     return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
       html.style.scrollSnapType = prevSnap;
       html.style.scrollBehavior = prevBehavior;
     };
-  }, []);
+  }, [videoDuration]);
 
   // Drive the video's currentTime from window scroll position while the user
   // is inside the scroll stage.
