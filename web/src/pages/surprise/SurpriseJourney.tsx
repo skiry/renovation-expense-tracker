@@ -120,8 +120,7 @@ function FinalCard({ onRestart }: { onRestart: () => void }) {
           <div className="text-6xl mx-auto">💝</div>
           <h1 className="text-3xl font-bold tracking-tight">Lăf iu</h1>
           <p className="text-base leading-relaxed text-muted-foreground">
-            Gata cu surpriza de astăzi în care celebrăm 1 an de la <s>logodna</s> cununia
-            religioasă. O zi plăcută în Visby să ai!
+            Gata cu surpriza de astăzi în care celebrăm 1 an de la <s>logodna</s> cununia civilă. O zi plăcută în Visby să ai!
           </p>
           <div className="flex items-center justify-center gap-2 text-pink-600 dark:text-pink-400">
             <Heart className="h-5 w-5 fill-current" />
