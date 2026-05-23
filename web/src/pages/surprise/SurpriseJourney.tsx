@@ -118,9 +118,10 @@ function FinalCard({ onRestart }: { onRestart: () => void }) {
       <Card className="border-pink-200 dark:border-pink-900/40 shadow-xl">
         <CardContent className="p-8 text-center space-y-5">
           <div className="text-6xl mx-auto">💝</div>
-          <h1 className="text-3xl font-bold tracking-tight">Te iubesc</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Lăf iu</h1>
           <p className="text-base leading-relaxed text-muted-foreground">
-            Mulțumesc pentru fiecare amintire de până acum și pentru toate cele care urmează. 🌱
+            Gata cu surpriza de astăzi în care celebrăm 1 an de la <s>logodna</s> cununia
+            religioasă. O zi plăcută în Visby să ai!
           </p>
           <div className="flex items-center justify-center gap-2 text-pink-600 dark:text-pink-400">
             <Heart className="h-5 w-5 fill-current" />
@@ -134,7 +135,7 @@ function FinalCard({ onRestart }: { onRestart: () => void }) {
             onClick={onRestart}
             className="text-xs text-muted-foreground/70"
           >
-            Reia călătoria
+            Joacă-te din nou
           </Button>
         </CardContent>
       </Card>
