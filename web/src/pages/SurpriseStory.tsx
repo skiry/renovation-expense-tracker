@@ -54,11 +54,19 @@ export default function SurpriseStory() {
   // While this page is mounted, enable CSS scroll-snap on the document so
   // each photo section snaps fully into view. The stage above it has no
   // snap-align, so scrubbing the video isn't interrupted.
+  //
+  // `proximity` (not `mandatory`) so the video stage remains freely scrollable
+  // — mandatory would prevent any scroll from landing inside the stage because
+  // the stage has no snap point.
   useEffect(() => {
+    // Start at the very top when this page mounts so the user actually sees
+    // the video stage instead of getting dropped past it.
+    window.scrollTo({ top: 0, behavior: 'auto' });
+
     const html = document.documentElement;
     const prevSnap = html.style.scrollSnapType;
     const prevBehavior = html.style.scrollBehavior;
-    html.style.scrollSnapType = 'y mandatory';
+    html.style.scrollSnapType = 'y proximity';
     html.style.scrollBehavior = 'smooth';
     return () => {
       html.style.scrollSnapType = prevSnap;
