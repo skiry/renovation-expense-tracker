@@ -5,7 +5,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import PuzzlePhase from './PuzzlePhase';
 import MemoryPhase from './MemoryPhase';
-import TimelinePhase from './TimelinePhase';
 
 /**
  * Multi-phase emotional journey shown after a successful unlock on /surprise.
@@ -16,14 +15,13 @@ import TimelinePhase from './TimelinePhase';
  * A discreet "Skip" button (top-right) lets the user (or me, while testing)
  * jump to the next phase without completing the current one.
  */
-export type Phase = 'puzzle' | 'memory' | 'timeline' | 'final';
+export type Phase = 'puzzle' | 'memory' | 'final';
 
-const PHASES: Phase[] = ['puzzle', 'memory', 'timeline', 'final'];
+const PHASES: Phase[] = ['puzzle', 'memory', 'final'];
 
 const PHASE_LABELS: Record<Phase, string> = {
   puzzle: 'Puzzle',
   memory: 'Memorie',
-  timeline: 'Cronologie',
   final: 'Final',
 };
 
@@ -74,7 +72,6 @@ export default function SurpriseJourney() {
       <main className="px-4 pt-16 pb-10">
         {phase === 'puzzle' && <PuzzlePhase onComplete={goNext} />}
         {phase === 'memory' && <MemoryPhase onComplete={goNext} />}
-        {phase === 'timeline' && <TimelinePhase onComplete={goNext} />}
         {phase === 'final' && <FinalCard onRestart={restart} />}
       </main>
     </div>

@@ -25,14 +25,14 @@ const PAIRS = TOTAL / 2; // 8
  * Each photo appears exactly twice in the shuffled deck.
  */
 const MEMORY_PHOTOS: string[] = [
-  'https://images.unsplash.com/photo-1518621736915-f3b1c41bfd00?w=300&h=300&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1494774157365-9e04c6720e47?w=300&h=300&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=300&h=300&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=300&h=300&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1502635385003-ee1e6a1a742d?w=300&h=300&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1521334884684-d80222895322?w=300&h=300&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1469371670807-013ccf25f16a?w=300&h=300&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1492288991661-058aa541ff43?w=300&h=300&fit=crop&auto=format',
+  '/surprise/memory1.jpg',
+  '/surprise/memory2.jpg',
+  '/surprise/memory3.jpg',
+  '/surprise/memory4.jpg',
+  '/surprise/memory5.jpg',
+  '/surprise/memory6.jpg',
+  '/surprise/memory7.jpg',
+  '/surprise/memory8.jpg',
 ];
 
 type Card = {

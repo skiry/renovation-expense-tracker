@@ -37,3 +37,6 @@ Thumbs.db
 # Misc
 *.local
 coverage/
+scripts/_originals/
+scripts/node_modules/
+

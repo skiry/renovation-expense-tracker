@@ -41,7 +41,7 @@ const KNOB_RATIO = 0.2;
 const KNOB = PIECE * KNOB_RATIO;
 const BOX = PIECE + KNOB * 2;
 
-const PUZZLE_IMG = 'https://images.unsplash.com/photo-1518621736915-f3b1c41bfd00?w=600&h=600&fit=crop&auto=format';
+const PUZZLE_IMG = '/surprise/puzzle.jpg';
 const PUZZLE_CAPTION = 'Felicitări, purkeluso! 💕';
 
 type Edge = 'flat' | 'tab' | 'blank';
