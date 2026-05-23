@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Heart } from 'lucide-react';
+import { Heart, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -66,8 +66,28 @@ export default function MemoryPhase({ onComplete }: { onComplete: () => void }) 
 
   const won = matched.size === TOTAL;
 
+  /** When the game is won, tapping a card opens that photo full-screen. */
+  const [lightboxPhotoIndex, setLightboxPhotoIndex] = useState<number | null>(null);
+
+  // Close lightbox on Escape.
+  useEffect(() => {
+    if (lightboxPhotoIndex === null) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setLightboxPhotoIndex(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxPhotoIndex]);
+
   const onTap = useCallback(
     (cardId: number) => {
+      // After winning: a tap opens the photo full-screen instead of running
+      // the original flip logic.
+      if (won) {
+        const card = deck.find((c) => c.id === cardId);
+        if (card) setLightboxPhotoIndex(card.photoIndex);
+        return;
+      }
       if (busy) return;
       if (matched.has(cardId)) return;
       if (flipped.has(cardId)) return;
@@ -77,7 +97,7 @@ export default function MemoryPhase({ onComplete }: { onComplete: () => void }) 
         return next;
       });
     },
-    [busy, flipped, matched]
+    [busy, deck, flipped, matched, won]
   );
 
   // When exactly two cards are flipped, check for a match.
@@ -142,6 +162,7 @@ export default function MemoryPhase({ onComplete }: { onComplete: () => void }) 
         <div className="text-center space-y-4 animate-in fade-in duration-700">
           <div className="text-3xl">💞</div>
           <p className="text-base font-medium">Purkelusa scumpika și deșteaptă, prafo! 💞</p>
+          <p className="text-xs text-muted-foreground">Atinge o poză pentru a o vedea mărită.</p>
           <Button type="button" onClick={onComplete} className="w-full">
             Continuă ›
           </Button>
@@ -153,6 +174,39 @@ export default function MemoryPhase({ onComplete }: { onComplete: () => void }) 
           </CardContent>
         </Card>
       )}
+
+      {lightboxPhotoIndex !== null && (
+        <Lightbox
+          src={MEMORY_PHOTOS[lightboxPhotoIndex]}
+          onClose={() => setLightboxPhotoIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200 p-4"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Închide"
+        className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center [-webkit-tap-highlight-color:transparent]"
+      >
+        <X className="h-5 w-5" />
+      </button>
+      <img
+        src={src}
+        alt=""
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-full max-w-full object-contain rounded-lg shadow-2xl"
+      />
     </div>
   );
 }
