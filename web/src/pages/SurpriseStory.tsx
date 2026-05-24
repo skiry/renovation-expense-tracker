@@ -138,6 +138,17 @@ export default function SurpriseStory() {
     };
   }, [videoReady]);
 
+  const [scrolled, setScrolled] = useState(false);
+
+  // Mark "scrolled" once on any user scroll, used to fade out the intro line.
+  useEffect(() => {
+    function onAnyScroll() {
+      if (window.scrollY > 8) setScrolled(true);
+    }
+    window.addEventListener('scroll', onAnyScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onAnyScroll);
+  }, []);
+
   return (
     <div className="bg-background text-foreground">
       {/* Scroll-driven video stage */}
@@ -161,28 +172,61 @@ export default function SurpriseStory() {
             className="absolute inset-0 w-full h-full object-cover"
           />
           {/* Subtle gradient overlay so any text on top stays readable */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black/40 pointer-events-none" />
-          <div className="absolute bottom-8 left-0 right-0 flex justify-center pointer-events-none">
-            <div className="relative flex flex-col items-center text-white drop-shadow">
-              {/* Two chevrons offset so the second one "follows" the first */}
-              <ChevronDown
-                className="h-9 w-9 reno-scroll-hint"
-                strokeWidth={1.5}
-                style={{ animationDelay: '0s' }}
-              />
-              <ChevronDown
-                className="h-9 w-9 -mt-5 reno-scroll-hint"
-                strokeWidth={1.5}
-                style={{ animationDelay: '0.4s' }}
-              />
-            </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black/40 pointer-events-none" />
+
+          {/* Intro line — visible only until the first scroll */}
+          <div
+            className={`absolute inset-0 flex items-center justify-center px-6 text-center pointer-events-none transition-opacity duration-700 ${
+              scrolled ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            <p className="inline-block rounded-2xl bg-black/35 backdrop-blur-md px-6 py-4 text-emerald-300 text-3xl sm:text-4xl font-semibold tracking-tight">
+              Câteva amintiri de acum 1 an... ❤️
+            </p>
           </div>
+
+          {scrolled ? (
+            /* After first scroll: single pair of chevrons at the bottom */
+            <div className="absolute bottom-8 left-0 right-0 flex justify-center pointer-events-none transition-opacity duration-500">
+              <div className="relative flex flex-col items-center text-white drop-shadow">
+                <ChevronDown
+                  className="h-9 w-9 reno-scroll-hint"
+                  strokeWidth={1.5}
+                  style={{ animationDelay: '0s' }}
+                />
+                <ChevronDown
+                  className="h-9 w-9 -mt-5 reno-scroll-hint"
+                  strokeWidth={1.5}
+                  style={{ animationDelay: '0.4s' }}
+                />
+              </div>
+            </div>
+          ) : (
+            /* While the intro text is centered: a column of chevrons cascading
+               from just below the text all the way to the bottom edge. */
+            <div className="absolute left-0 right-0 flex flex-col items-center text-white drop-shadow pointer-events-none transition-opacity duration-500"
+              style={{ top: '58%', bottom: '4%' }}
+            >
+              {Array.from({ length: 6 }).map((_, i) => (
+                <ChevronDown
+                  key={i}
+                  className="h-9 w-9 -mt-3 reno-scroll-hint first:mt-0"
+                  strokeWidth={1.5}
+                  style={{ animationDelay: `${i * 0.18}s` }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* One photo per full-viewport section */}
       {PHOTOS.map((p, i) => (
-        <PhotoSection key={i} src={p.src} />
+        <PhotoSection
+          key={i}
+          src={p.src}
+          caption={i === 0 ? 'Și câteva poze... 💚' : undefined}
+        />
       ))}
 
       {/* Final note */}
@@ -200,28 +244,42 @@ export default function SurpriseStory() {
   );
 }
 
-function PhotoSection({ src }: { src: string }) {
+function PhotoSection({ src, caption }: { src: string; caption?: string }) {
   const [visible, setVisible] = useState(false);
+  const [captionVisible, setCaptionVisible] = useState(false);
   const ref = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // Use a high threshold so we only flag "visible" once the section is
+    // (nearly) fully in view — i.e. the user has actually arrived. With a
+    // low threshold, scrolling through the previous stage triggers this too
+    // early and the caption timer ends before the user even sees the photo.
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
-          if (e.isIntersecting) {
+          if (e.isIntersecting && e.intersectionRatio >= 0.75) {
             setVisible(true);
             io.disconnect();
             break;
           }
         }
       },
-      { threshold: 0.3 }
+      { threshold: [0.75] }
     );
     io.observe(el);
     return () => io.disconnect();
   }, []);
+
+  // Once the section becomes visible, show the caption briefly, then fade it
+  // out after 3 seconds so it doesn't linger on top of the photo.
+  useEffect(() => {
+    if (!visible || !caption) return;
+    setCaptionVisible(true);
+    const t = window.setTimeout(() => setCaptionVisible(false), 3000);
+    return () => window.clearTimeout(t);
+  }, [visible, caption]);
 
   return (
     <section
@@ -236,6 +294,17 @@ function PhotoSection({ src }: { src: string }) {
           visible ? 'opacity-100 scale-100' : 'opacity-0 scale-105'
         }`}
       />
+      {caption && (
+        <div className="absolute inset-0 flex items-center justify-center px-6 text-center pointer-events-none">
+          <p
+            className={`inline-block rounded-2xl bg-black/35 backdrop-blur-md px-6 py-4 text-white text-3xl sm:text-4xl font-semibold tracking-tight transition-opacity duration-1000 ${
+              captionVisible ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            {caption}
+          </p>
+        </div>
+      )}
     </section>
   );
 }
