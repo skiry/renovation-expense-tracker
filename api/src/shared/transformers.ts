@@ -7,6 +7,8 @@ export function withPhotoUrls(expense: Expense): any {
     id: p.id,
     blobName: p.blobName,
     uploadedAt: p.uploadedAt,
+    contentType: p.contentType,
+    fileName: p.fileName,
     blobUrl: getReadUrl(p.blobName, 7),
   }));
   return { ...expense, photos };
@@ -21,10 +23,12 @@ export function sanitizeForStorage<T extends Partial<Expense>>(input: T): T {
   return copy;
 }
 
-export function newExpensePhoto(blobName: string): ExpensePhoto {
+export function newExpensePhoto(blobName: string, contentType?: string, fileName?: string): ExpensePhoto {
   return {
     id: blobName.split('/').pop()!.replace(/\.[^.]+$/, ''),
     blobName,
     uploadedAt: new Date().toISOString(),
+    contentType,
+    fileName,
   };
 }

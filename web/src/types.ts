@@ -14,6 +14,8 @@ export interface ExpensePhoto {
   blobUrl: string;
   thumbnailUrl?: string;
   uploadedAt: string;
+  contentType?: string;
+  fileName?: string;
 }
 
 export interface Expense {

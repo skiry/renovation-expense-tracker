@@ -41,8 +41,16 @@ function container(): ContainerClient {
 }
 
 /** Upload a file buffer, returns the blob name. */
-export async function uploadPhoto(buffer: Buffer, mime: string, workspaceId: string, expenseId: string): Promise<string> {
-  const ext = mime.split('/')[1]?.replace(/[^a-z0-9]/gi, '') || 'jpg';
+export async function uploadPhoto(
+  buffer: Buffer,
+  mime: string,
+  workspaceId: string,
+  expenseId: string,
+  fileName?: string
+): Promise<string> {
+  const fileExt = fileName?.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+  const mimeExt = mime.split('/').pop()?.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  const ext = fileExt || mimeExt || 'bin';
   const blobName = `${workspaceId}/${expenseId}/${uuid()}.${ext}`;
   const block = container().getBlockBlobClient(blobName);
   await block.uploadData(buffer, {

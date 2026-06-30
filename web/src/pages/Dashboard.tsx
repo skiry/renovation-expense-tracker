@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, EyeOff, Eye, ChevronRight, Check, Camera, X, Search } from 'lucide-react';
+import { GripVertical, Plus, EyeOff, Eye, ChevronRight, Check, Paperclip, X, Search, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import imageCompression from 'browser-image-compression';
 
@@ -358,7 +358,7 @@ function SortableExpenseRow({ expense, eurToRon }: { expense: Expense; eurToRon:
                   </span>
                 )}
                 {expense.photos.length > 0 && (
-                  <span className="whitespace-nowrap">📷 {expense.photos.length}</span>
+                  <span className="whitespace-nowrap">� {expense.photos.length}</span>
                 )}
               </div>
               <div className="font-semibold tabular-nums whitespace-nowrap">
@@ -385,7 +385,7 @@ function AddExpenseFab({ defaultPriority = true }: { defaultPriority?: boolean }
   const create = useCreateExpense();
   const addPhoto = useAddPhoto();
 
-  const MAX_PHOTOS = 20;
+  const MAX_PHOTOS = 30;
 
   function reset() {
     setTitle('');
@@ -400,7 +400,7 @@ function AddExpenseFab({ defaultPriority = true }: { defaultPriority?: boolean }
     if (!files) return;
     const remaining = MAX_PHOTOS - pendingPhotos.length;
     if (remaining <= 0) {
-      toast.error(`Maxim ${MAX_PHOTOS} poze pe element.`);
+      toast.error(`Maxim ${MAX_PHOTOS} atașamente pe element.`);
       return;
     }
     const list = Array.from(files).slice(0, remaining);
@@ -427,21 +427,24 @@ function AddExpenseFab({ defaultPriority = true }: { defaultPriority?: boolean }
     });
 
     if (pendingPhotos.length > 0) {
-      const tid = toast.loading(`Încarc ${pendingPhotos.length} ${pendingPhotos.length === 1 ? 'poză' : 'poze'}…`);
+      const tid = toast.loading(`Încarc ${pendingPhotos.length} ${pendingPhotos.length === 1 ? 'atașament' : 'atașamente'}…`);
       try {
         for (const file of pendingPhotos) {
-          const compressed = await imageCompression(file, {
-            maxSizeMB: 0.7,
-            maxWidthOrHeight: 1920,
-            useWebWorker: true,
-            fileType: 'image/jpeg',
-            initialQuality: 0.8,
-          });
-          await addPhoto.mutateAsync({ expenseId: created.id, file: compressed });
+          const isImage = file.type.startsWith('image/');
+          const toUpload = isImage
+            ? await imageCompression(file, {
+                maxSizeMB: 0.7,
+                maxWidthOrHeight: 1920,
+                useWebWorker: true,
+                fileType: 'image/jpeg',
+                initialQuality: 0.8,
+              })
+            : file;
+          await addPhoto.mutateAsync({ expenseId: created.id, file: toUpload });
         }
         toast.success('Cheltuială adăugată', { id: tid });
       } catch (err: any) {
-        toast.error(err?.message ?? 'Cheltuiala s-a creat dar pozele au eșuat', { id: tid });
+        toast.error(err?.message ?? 'Cheltuiala s-a creat dar atașamentele au eșuat', { id: tid });
       }
     } else {
       toast.success('Cheltuială adăugată');
@@ -514,11 +517,11 @@ function AddExpenseFab({ defaultPriority = true }: { defaultPriority?: boolean }
             />
           </div>
 
-          {/* Photos */}
+          {/* Attachments */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>
-                Poze (opțional){' '}
+                Atașamente (opțional){' '}
                 <span className="text-xs text-muted-foreground font-normal">
                   {pendingPhotos.length} / {MAX_PHOTOS}
                 </span>
@@ -530,12 +533,12 @@ function AddExpenseFab({ defaultPriority = true }: { defaultPriority?: boolean }
                 onClick={() => fileInputRef.current?.click()}
                 disabled={pendingPhotos.length >= MAX_PHOTOS}
               >
-                <Camera className="h-4 w-4 mr-1" /> Adaugă
+                <Paperclip className="h-4 w-4 mr-1" /> Adaugă
               </Button>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
                 multiple
                 className="hidden"
                 onChange={(e) => onPickFiles(e.target.files)}
@@ -543,23 +546,33 @@ function AddExpenseFab({ defaultPriority = true }: { defaultPriority?: boolean }
             </div>
             {pendingPhotos.length > 0 && (
               <div className="grid grid-cols-4 gap-2">
-                {pendingPhotos.map((f, idx) => (
-                  <div key={idx} className="relative aspect-square rounded-md overflow-hidden bg-muted group">
-                    <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      aria-label="Elimină"
-                      onClick={() => setPendingPhotos((prev) => prev.filter((_, i) => i !== idx))}
-                      className="absolute top-1 right-1 bg-black/60 hover:bg-destructive text-white rounded-full p-1"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
+                {pendingPhotos.map((f, idx) => {
+                  const isImage = f.type.startsWith('image/');
+                  return (
+                    <div key={idx} className="relative aspect-square rounded-md overflow-hidden bg-muted group">
+                      {isImage ? (
+                        <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-1 text-center">
+                          <FileText className="h-6 w-6 text-muted-foreground" />
+                          <span className="mt-1 text-[10px] leading-tight break-all line-clamp-2">{f.name}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        aria-label="Elimină"
+                        onClick={() => setPendingPhotos((prev) => prev.filter((_, i) => i !== idx))}
+                        className="absolute top-1 right-1 bg-black/60 hover:bg-destructive text-white rounded-full p-1"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
             {pendingPhotos.length > 0 && (
-              <p className="text-xs text-muted-foreground">Pozele se vor comprima și încărca după salvare.</p>
+              <p className="text-xs text-muted-foreground">Pozele se vor comprima și încărca după salvare. Documentele se încarcă ca atare.</p>
             )}
           </div>
         </div>

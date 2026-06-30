@@ -14,7 +14,7 @@ Built as an Azure Static Web App (React frontend + Azure Functions API + Cosmos 
 - 📝 **Expense detail** page with inline-edit title, priority and paid toggles, description, photos.
 - 🧮 **Estimated vs. detailed price mode** — switch per item. Estimated mode uses your rough estimate; detailed mode sums a list of named sub-expenses (each with own currency and paid flag).
 - 💵 **Multi-currency** (RON / EUR) with conversion to RON for all totals. Exchange rate fetched daily from BNR's public XML and cached server-side for 24h.
-- 📷 **Photos** — up to 20 per item, compressed in the browser (max 1920px, ~80% JPEG quality) before uploading to Azure Blob Storage. Served as 7-day SAS URLs.
+- � **Attachments** — up to 30 per item (images + documents like PDF, Word, Excel, CSV, TXT). Images are compressed in the browser (max 1920px, ~80% JPEG quality); documents upload as-is. Stored in Azure Blob Storage and served as 7-day SAS URLs.
 - 🕐 **Audit history** — every create / update / delete / photo action is logged with the user's name and a per-field diff. History page groups entries by day, with `Important` / `Detailed` filter and click-to-expand modal showing before → after values.
 - 🔔 **Web push notifications** — opt-in from Settings (or via the dismissible Dashboard banner). When another user creates/deletes an expense or changes a "meaningful" price (estimated price for items in *estimated* mode, sub-expense price for items in *detailed* mode), every other subscriber in the workspace gets a push. Works on Android Chrome, desktop Chrome/Firefox/Edge, and iOS 16.4+ **only when the app is installed to the Home Screen**.
 - 🌗 **Theme switcher** (system default · light · dark) — persisted in localStorage.

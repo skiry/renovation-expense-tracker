@@ -401,6 +401,8 @@ class MockApi implements IApi {
       id: uid(),
       blobUrl: dataUrl,
       uploadedAt: new Date().toISOString(),
+      contentType: file.type || undefined,
+      fileName: file.name || undefined,
     };
     exp.photos.push(photo);
     exp.updatedAt = new Date().toISOString();

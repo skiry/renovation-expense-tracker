@@ -13,6 +13,8 @@ export interface ExpensePhoto {
   id: string;
   blobName: string;
   uploadedAt: string;
+  contentType?: string;
+  fileName?: string;
 }
 
 export interface Expense {

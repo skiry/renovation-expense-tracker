@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Trash2, Plus, Camera, X, AlertTriangle, Check } from 'lucide-react';
+import { ArrowLeft, Trash2, Plus, Paperclip, X, AlertTriangle, Check, FileText, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import imageCompression from 'browser-image-compression';
 
@@ -35,7 +35,7 @@ import { Currency, ExpenseDetail, PriceMode } from '@/types';
 import { detailedTotalRon, displayPriceRon } from '@/utils/calculations';
 import { cn, formatCurrency, formatRon } from '@/lib/utils';
 
-const MAX_PHOTOS = 20;
+const MAX_PHOTOS = 30;
 
 export default function ExpenseDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -106,25 +106,28 @@ export default function ExpenseDetailPage() {
     if (!files || files.length === 0) return;
     const remaining = MAX_PHOTOS - expense!.photos.length;
     if (remaining <= 0) {
-      toast.error(`Maxim ${MAX_PHOTOS} poze pe element.`);
+      toast.error(`Maxim ${MAX_PHOTOS} atașamente pe element.`);
       return;
     }
     const list = Array.from(files).slice(0, remaining);
-    const tid = toast.loading(`Procesez ${list.length} ${list.length === 1 ? 'poză' : 'poze'}…`);
+    const tid = toast.loading(`Procesez ${list.length} ${list.length === 1 ? 'atașament' : 'atașamente'}…`);
     try {
       for (const file of list) {
-        const compressed = await imageCompression(file, {
-          maxSizeMB: 0.7,
-          maxWidthOrHeight: 1920,
-          useWebWorker: true,
-          fileType: 'image/jpeg',
-          initialQuality: 0.8,
-        });
-        await addPhoto.mutateAsync({ expenseId: expense!.id, file: compressed });
+        const isImage = file.type.startsWith('image/');
+        const toUpload = isImage
+          ? await imageCompression(file, {
+              maxSizeMB: 0.7,
+              maxWidthOrHeight: 1920,
+              useWebWorker: true,
+              fileType: 'image/jpeg',
+              initialQuality: 0.8,
+            })
+          : file;
+        await addPhoto.mutateAsync({ expenseId: expense!.id, file: toUpload });
       }
-      toast.success('Poze adăugate', { id: tid });
+      toast.success('Atașamente adăugate', { id: tid });
     } catch (err: any) {
-      toast.error(err?.message ?? 'Eroare la încărcarea pozelor', { id: tid });
+      toast.error(err?.message ?? 'Eroare la încărcarea atașamentelor', { id: tid });
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -352,12 +355,12 @@ export default function ExpenseDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Photos */}
+        {/* Attachments */}
         <Card>
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium">Poze</div>
+                <div className="text-sm font-medium">Atașamente</div>
                 <div className="text-xs text-muted-foreground">
                   {expense.photos.length} / {MAX_PHOTOS}
                 </div>
@@ -368,40 +371,61 @@ export default function ExpenseDetailPage() {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={addPhoto.isPending || expense.photos.length >= MAX_PHOTOS}
               >
-                <Camera className="h-4 w-4 mr-1" /> Adaugă
+                <Paperclip className="h-4 w-4 mr-1" /> Adaugă
               </Button>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
                 multiple
                 className="hidden"
                 onChange={(e) => handleFiles(e.target.files)}
               />
             </div>
             {expense.photos.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-3">Nicio poză adăugată.</p>
+              <p className="text-sm text-muted-foreground text-center py-3">Niciun atașament adăugat.</p>
             ) : (
               <div className="grid grid-cols-3 gap-2">
-                {expense.photos.map((p) => (
-                  <div key={p.id} className="relative aspect-square rounded-md overflow-hidden bg-muted group">
-                    <img
-                      src={p.thumbnailUrl ?? p.blobUrl}
-                      alt=""
-                      loading="lazy"
-                      className="w-full h-full object-cover cursor-zoom-in"
-                      onClick={() => setLightboxUrl(p.blobUrl)}
-                    />
-                    <button
-                      type="button"
-                      aria-label="Șterge poza"
-                      onClick={() => deletePhoto.mutate({ expenseId: expense.id, photoId: p.id })}
-                      className="absolute top-1 right-1 bg-black/60 hover:bg-destructive text-white rounded-full p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
+                {expense.photos.map((p) => {
+                  const isImage = (p.contentType ?? '').startsWith('image/') ||
+                    (!p.contentType && !p.fileName);
+                  return (
+                    <div key={p.id} className="relative aspect-square rounded-md overflow-hidden bg-muted group">
+                      {isImage ? (
+                        <img
+                          src={p.thumbnailUrl ?? p.blobUrl}
+                          alt=""
+                          loading="lazy"
+                          className="w-full h-full object-cover cursor-zoom-in"
+                          onClick={() => setLightboxUrl(p.blobUrl)}
+                        />
+                      ) : (
+                        <a
+                          href={p.blobUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full h-full flex flex-col items-center justify-center p-2 text-center hover:bg-accent/40"
+                        >
+                          <FileText className="h-8 w-8 text-muted-foreground" />
+                          <span className="mt-1 text-[11px] leading-tight break-all line-clamp-2">
+                            {p.fileName ?? 'Document'}
+                          </span>
+                          <span className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                            <Download className="h-3 w-3" /> Deschide
+                          </span>
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        aria-label="Șterge atașamentul"
+                        onClick={() => deletePhoto.mutate({ expenseId: expense.id, photoId: p.id })}
+                        className="absolute top-1 right-1 bg-black/60 hover:bg-destructive text-white rounded-full p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

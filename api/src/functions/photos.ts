@@ -7,6 +7,8 @@ import { ok, badRequest, notFound, serverError } from '../shared/responses';
 import { Expense } from '../shared/types';
 import { newExpensePhoto, withPhotoUrls } from '../shared/transformers';
 
+const MAX_ATTACHMENTS = 30;
+
 app.http('addPhoto', {
   methods: ['POST', 'OPTIONS'],
   authLevel: 'anonymous',
@@ -26,16 +28,21 @@ app.http('addPhoto', {
       if (!file || typeof file === 'string') return badRequest('Missing photo file');
 
       const buffer = Buffer.from(await (file as File).arrayBuffer());
-      const mime = (file as File).type || 'image/jpeg';
+      const mime = (file as File).type || 'application/octet-stream';
+      const fileName = (file as File).name || undefined;
 
-      const blobName = await uploadPhoto(buffer, mime, auth.accessCode, id);
-      const photo = newExpensePhoto(blobName);
+      const blobName = await uploadPhoto(buffer, mime, auth.accessCode, id, fileName);
+      const photo = newExpensePhoto(blobName, mime, fileName);
 
       try {
         const { resource, etag } = await expensesContainer().item(id, auth.accessCode).read<Expense>();
         if (!resource) {
           await deleteBlob(blobName);
           return notFound();
+        }
+        if ((resource.photos?.length ?? 0) >= MAX_ATTACHMENTS) {
+          await deleteBlob(blobName);
+          return badRequest(`Maximum ${MAX_ATTACHMENTS} attachments per expense`);
         }
         resource.photos.push(photo);
         resource.updatedAt = new Date().toISOString();
@@ -57,6 +64,10 @@ app.http('addPhoto', {
           if (!r.resource) {
             await deleteBlob(blobName);
             return notFound();
+          }
+          if ((r.resource.photos?.length ?? 0) >= MAX_ATTACHMENTS) {
+            await deleteBlob(blobName);
+            return badRequest(`Maximum ${MAX_ATTACHMENTS} attachments per expense`);
           }
           r.resource.photos.push(photo);
           r.resource.updatedAt = new Date().toISOString();
