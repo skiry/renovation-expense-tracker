@@ -20,9 +20,13 @@ function save(v: boolean) {
 interface UiState {
   hidePaid: boolean;
   setHidePaid: (v: boolean) => void;
+  hideTotals: boolean;
+  toggleHideTotals: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
+  hideTotals: false,
+  toggleHideTotals: () => set((state) => ({ hideTotals: !state.hideTotals })),
   hidePaid: load(),
   setHidePaid: (v) => {
     save(v);

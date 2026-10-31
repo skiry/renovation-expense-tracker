@@ -195,25 +195,42 @@ function SummaryCard({
   tab: Tab;
   totals: { total: number; spent: number; count: number; paidCount: number };
 }) {
+  const hideTotals = useUiStore((s) => s.hideTotals);
+  const toggleHideTotals = useUiStore((s) => s.toggleHideTotals);
+  const toggleLabel = hideTotals ? 'Arată sumele' : 'Ascunde sumele';
   const label = tab === 'priority' ? 'Prioritare' : 'Neprioritare';
   return (
     <Card>
-      <CardContent className="p-4 sm:p-6">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+      <CardContent className="p-4 sm:p-6 flex items-start gap-2">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 flex-1 min-w-0">
           <Stat
             label={`Total ${label.toLowerCase()}`}
             sub={`${totals.count} ${totals.count === 1 ? 'element' : 'elemente'}`}
             value={totals.total}
             accent={tab === 'priority' ? 'primary' : undefined}
             bold
+            hidden={hideTotals}
           />
           <Stat
             label="Cheltuit"
             sub={`${totals.paidCount} ${totals.paidCount === 1 ? 'achitat' : 'achitate'}`}
             value={totals.spent}
             accent="success"
+            hidden={hideTotals}
           />
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="shrink-0"
+          onClick={toggleHideTotals}
+          aria-label={toggleLabel}
+          aria-pressed={hideTotals}
+          title={toggleLabel}
+        >
+          {hideTotals ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+        </Button>
       </CardContent>
     </Card>
   );
@@ -225,12 +242,14 @@ function Stat({
   value,
   accent,
   bold,
+  hidden,
 }: {
   label: string;
   sub?: string;
   value: number;
   accent?: 'primary' | 'success';
   bold?: boolean;
+  hidden: boolean;
 }) {
   return (
     <div className="space-y-0.5 min-w-0">
@@ -240,11 +259,14 @@ function Stat({
           'text-base sm:text-xl tabular-nums break-words',
           bold ? 'font-bold' : 'font-semibold',
           accent === 'primary' && 'text-primary',
-          accent === 'success' && 'text-green-600 dark:text-green-500'
+          accent === 'success' && 'text-green-600 dark:text-green-500',
+          hidden && 'blur-md select-none'
         )}
+        aria-hidden={hidden}
       >
         {formatRon(value)}
       </div>
+      {hidden && <span className="sr-only">Sumă ascunsă</span>}
       {sub && <div className="text-xs text-muted-foreground truncate">{sub}</div>}
     </div>
   );
