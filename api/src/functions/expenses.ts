@@ -111,7 +111,7 @@ app.http('reorderExpenses', {
           const r = await expensesContainer().item(id, auth.accessCode).read<Expense>();
           if (!r.resource) continue;
           await expensesContainer().item(id, auth.accessCode).replace(
-            { ...r.resource, order, updatedAt: new Date().toISOString() },
+            { ...r.resource, order },
             { accessCondition: r.etag ? { type: 'IfMatch', condition: r.etag } : undefined }
           );
         } catch (err: any) {
@@ -251,5 +251,3 @@ app.http('expensesItem', {
     }
   },
 });
-
-

@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, EyeOff, Eye, ChevronRight, Check, Paperclip, X, Search, FileText } from 'lucide-react';
+import { GripVertical, Plus, EyeOff, Eye, ChevronRight, Check, Paperclip, X, Search, FileText, ArrowUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import imageCompression from 'browser-image-compression';
 
@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import {
   useExpenses,
@@ -38,6 +39,7 @@ import {
   useAddPhoto,
 } from '@/hooks/useExpenses';
 import { displayPriceRon, spentForExpense } from '@/utils/calculations';
+import { EXPENSE_SORT_OPTIONS, sortExpenses } from '@/utils/sorting';
 import { formatRon, cn } from '@/lib/utils';
 import { useUiStore } from '@/store/ui';
 import { Expense, Currency } from '@/types';
@@ -51,6 +53,7 @@ export default function DashboardPage() {
   const eurToRon = rate?.eurToRon ?? 5;
   const hidePaid = useUiStore((s) => s.hidePaid);
   const setHidePaid = useUiStore((s) => s.setHidePaid);
+  const expenseSort = useUiStore((s) => s.expenseSort);
 
   const [tab, setTab] = useState<Tab>('priority');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -87,8 +90,8 @@ export default function DashboardPage() {
           e.details.some((d) => d.name.toLowerCase().includes(q))
       );
     }
-    return list.slice().sort((a, b) => a.order - b.order);
-  }, [tabExpenses, hidePaid, search]);
+    return sortExpenses(list, expenseSort, eurToRon);
+  }, [tabExpenses, hidePaid, search, expenseSort, eurToRon]);
 
   return (
     <div className="space-y-4">
@@ -136,6 +139,7 @@ export default function DashboardPage() {
             <Search className="h-4 w-4" />
           </Button>
         </div>
+        <SortControl />
         {searchOpen && (
           <div className="mt-2 flex items-center gap-2">
             <Input
@@ -169,22 +173,69 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <ExpensesList
-        items={visibleList}
-        eurToRon={eurToRon}
-        emptyText={
-          search.trim()
-            ? `Nicio cheltuială ${tab === 'priority' ? 'prioritară' : 'neprioritară'} pentru „${search.trim()}".`
-            : tab === 'priority'
-            ? 'Nicio cheltuială prioritară.'
-            : 'Nicio cheltuială neprioritară.'
-        }
-      />
+      {!isLoading && (
+        <ExpensesList
+          items={visibleList}
+          manualOrder={expenseSort === 'manual'}
+          eurToRon={eurToRon}
+          emptyText={
+            search.trim()
+              ? `Nicio cheltuială ${tab === 'priority' ? 'prioritară' : 'neprioritară'} pentru „${search.trim()}".`
+              : tab === 'priority'
+              ? 'Nicio cheltuială prioritară.'
+              : 'Nicio cheltuială neprioritară.'
+          }
+        />
+      )}
 
       {isLoading && <p className="text-center text-muted-foreground text-sm">Se încarcă…</p>}
 
       <AddExpenseFab defaultPriority={tab === 'priority'} />
     </div>
+  );
+}
+
+function SortControl() {
+  const [open, setOpen] = useState(false);
+  const sort = useUiStore((s) => s.expenseSort);
+  const setSort = useUiStore((s) => s.setExpenseSort);
+  const label = EXPENSE_SORT_OPTIONS.find((option) => option.value === sort)!.label;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2 w-full justify-start"
+          aria-label={`Sortare: ${label}`}
+        >
+          <ArrowUpDown className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="p-1">
+        <div className="space-y-0.5" role="group" aria-label="Sortare cheltuieli">
+          {EXPENSE_SORT_OPTIONS.map((option) => (
+            <Button
+              key={option.value}
+              type="button"
+              variant="ghost"
+              className="w-full justify-between"
+              aria-pressed={sort === option.value}
+              onClick={() => {
+                setSort(option.value);
+                setOpen(false);
+              }}
+            >
+              {option.label}
+              {sort === option.value && <Check className="h-4 w-4" aria-hidden="true" />}
+            </Button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -256,7 +307,7 @@ function Stat({
       <div className="text-xs text-muted-foreground uppercase tracking-wide truncate">{label}</div>
       <div
         className={cn(
-          'text-base sm:text-xl tabular-nums break-words',
+          'text-sm sm:text-lg tabular-nums whitespace-nowrap',
           bold ? 'font-bold' : 'font-semibold',
           accent === 'primary' && 'text-primary',
           accent === 'success' && 'text-green-600 dark:text-green-500',
@@ -276,14 +327,16 @@ function ExpensesList({
   items,
   eurToRon,
   emptyText,
+  manualOrder,
 }: {
   items: Expense[];
   eurToRon: number;
   emptyText: string;
+  manualOrder: boolean;
 }) {
   const reorder = useReorderExpenses();
-  const [localOrder, setLocalOrder] = useState<Expense[] | null>(null);
-  const list = localOrder ?? items;
+  const [localOrder, setLocalOrder] = useState<{ source: Expense[]; items: Expense[] } | null>(null);
+  const list = localOrder?.source === items ? localOrder.items : items;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -291,15 +344,21 @@ function ExpensesList({
   );
 
   function onDragEnd(e: DragEndEvent) {
+    if (!manualOrder || reorder.isPending) return;
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const oldIndex = list.findIndex((x) => x.id === active.id);
     const newIndex = list.findIndex((x) => x.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
     const next = arrayMove(list, oldIndex, newIndex);
-    setLocalOrder(next);
+    setLocalOrder({ source: items, items: next });
     reorder.mutate(
-      next.map((e, i) => ({ id: e.id, order: i })),
-      { onSettled: () => setLocalOrder(null) }
+      // Keep hidden expenses in their existing manual-order slots.
+      next.map((e, i) => ({ id: e.id, order: list[i].order })),
+      {
+        onError: () => toast.error('Nu s-a putut salva ordinea cheltuielilor. Reîncearcă.'),
+        onSettled: () => setLocalOrder(null),
+      }
     );
   }
 
@@ -316,7 +375,13 @@ function ExpensesList({
       <SortableContext items={list.map((e) => e.id)} strategy={verticalListSortingStrategy}>
         <div className="space-y-2">
           {list.map((e) => (
-            <SortableExpenseRow key={e.id} expense={e} eurToRon={eurToRon} />
+            <SortableExpenseRow
+              key={e.id}
+              expense={e}
+              eurToRon={eurToRon}
+              manualOrder={manualOrder}
+              dragDisabled={!manualOrder || reorder.isPending}
+            />
           ))}
         </div>
       </SortableContext>
@@ -324,9 +389,22 @@ function ExpensesList({
   );
 }
 
-function SortableExpenseRow({ expense, eurToRon }: { expense: Expense; eurToRon: number }) {
+function SortableExpenseRow({
+  expense,
+  eurToRon,
+  manualOrder,
+  dragDisabled,
+}: {
+  expense: Expense;
+  eurToRon: number;
+  manualOrder: boolean;
+  dragDisabled: boolean;
+}) {
   const navigate = useNavigate();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: expense.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: expense.id,
+    disabled: dragDisabled,
+  });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
   const display = displayPriceRon(expense, eurToRon);
 
@@ -341,15 +419,18 @@ function SortableExpenseRow({ expense, eurToRon }: { expense: Expense; eurToRon:
       )}
     >
       <div className="flex items-stretch">
-        <button
-          {...attributes}
-          {...listeners}
-          className="flex items-center justify-center px-2 sm:px-3 text-muted-foreground hover:text-foreground touch-none cursor-grab active:cursor-grabbing"
-          aria-label="Mută"
-          type="button"
-        >
-          <GripVertical className="h-5 w-5" />
-        </button>
+        {manualOrder && (
+          <button
+            {...attributes}
+            {...listeners}
+            className="flex items-center justify-center px-2 sm:px-3 text-muted-foreground hover:text-foreground touch-none cursor-grab active:cursor-grabbing disabled:opacity-50"
+            aria-label="Mută"
+            type="button"
+            disabled={dragDisabled}
+          >
+            <GripVertical className="h-5 w-5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => navigate(`/expense/${expense.id}`)}

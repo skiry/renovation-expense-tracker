@@ -156,10 +156,14 @@ export function useDeleteExpense() {
 
 export function useReorderExpenses() {
   const accessCode = useAuthCode();
-  const invalidate = useInvalidate();
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (ordered: { id: string; order: number }[]) => api.reorderExpenses(accessCode!, ordered),
-    onSuccess: () => invalidate(),
+    // Keep the optimistic order until the refreshed queries have reached the cache.
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: QK.expenses(accessCode ?? '') }),
+      qc.invalidateQueries({ queryKey: QK.history(accessCode ?? '') }),
+    ]),
   });
 }
 

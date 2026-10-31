@@ -171,11 +171,15 @@ export default function SettingsPage() {
               {userName ?? '—'}
             </span>
           </div>
-          <Separator />
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Mod</span>
-            <span>{IS_MOCK ? 'POC (mock local)' : 'Producție'}</span>
-          </div>
+          {import.meta.env.MODE === 'staging' && (
+            <>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Mod</span>
+                <span>{IS_MOCK ? 'POC (mock local)' : 'Staging'}</span>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
